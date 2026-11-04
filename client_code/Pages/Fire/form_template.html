@@ -1,0 +1,54 @@
+<anvil-form layout="Campfire.Layouts.Shell">
+<anvil-block slot="content">
+<div class="cf-page-wrap">
+<div class="cf-page" anvil:name="page">
+  <anvil-component type="Campfire.Components.FireStage" name="stage"></anvil-component>
+  <div class="cf-veil" aria-hidden="true"></div>
+
+  <section class="cf-intro lp-hero" anvil:name="intro" aria-labelledby="cf-title">
+    <anvil-component type="Label" name="place_kicker" prop:role='["cf-kicker"]'></anvil-component>
+    <h1 id="cf-title" class="cf-title">Sit by the fire.</h1>
+    <p class="cf-lead">A real campfire, simulated live: flames from a fluid simulation, crackles made by chance, logs that
+      char, glow and fall in. It has never burned this way before, and never will again.</p>
+    <anvil-component type="Button" name="match_button" prop:text="Strike a match" prop:role='["btn", "btn-primary", "btn-lg", "cf-match", "ic-flame"]'></anvil-component>
+    <p class="cf-hint">Best with headphones, in the dark. Drag to look around.</p>
+    <div class="cf-intro-links">
+      <anvil-component type="Button" name="intro_place_button" prop:text="Choose a place" prop:role='["btn", "btn-ghost", "btn-sm", "cf-ghost", "ic-map"]'></anvil-component>
+      <a href="#about" class="cf-link">How it works</a>
+      <button type="button" class="cf-link" data-lk-open="overview">Privacy &amp; Terms</button>
+    </div>
+  </section>
+
+  <div class="cf-hud" anvil:name="hud">
+    <div class="cf-top">
+      <a class="cf-brand" href="#about" aria-label="How Campfire works"><img src="_/theme/icon.svg" alt="" width="28" height="28"><span>Campfire</span></a>
+      <div class="cf-top-right">
+        <anvil-component type="Button" name="place_button" prop:role='["btn", "btn-sm", "cf-glass", "ic-map"]' prop:tooltip="Choose a place (P)"></anvil-component>
+        <anvil-component type="Button" name="sound_button" prop:text="Sound on" prop:role='["btn", "btn-icon", "cf-glass", "ic-volume"]' prop:tooltip="Sound (M)"></anvil-component>
+        <anvil-component type="Button" name="settings_button" prop:text="Settings" prop:role='["btn", "btn-icon", "cf-glass", "ic-sliders"]' prop:tooltip="Sound, wind, sleep timer"></anvil-component>
+        <anvil-component type="Button" name="full_button" prop:text="Full screen" prop:role='["btn", "btn-icon", "cf-glass", "ic-expand"]' prop:tooltip="Full screen (F)"></anvil-component>
+      </div>
+    </div>
+    <div class="cf-bottom">
+      <div class="cf-status">
+        <anvil-component type="Label" name="status_label" prop:role='["cf-status-text"]'></anvil-component>
+        <anvil-component type="Label" name="presence_label" prop:role='["cf-presence"]'></anvil-component>
+      </div>
+      <div class="cf-tray" role="group" aria-label="Tend the fire">
+        <anvil-component type="RepeatingPanel" name="wood_panel" prop:item_template="Campfire.Items.WoodButton" prop:role='["contents"]'></anvil-component>
+        <anvil-component type="Button" name="stir_button" prop:text="Stir" prop:role='["btn", "cf-wood", "cf-stir", "ic-stir"]' prop:tooltip="Stir the coals (S)"></anvil-component>
+        <anvil-component type="Button" name="relight_button" prop:text="Strike a match" prop:role='["btn", "cf-wood", "cf-relight", "ic-flame"]'></anvil-component>
+      </div>
+    </div>
+  </div>
+
+  <div class="cf-fallback" anvil:name="fallback" role="alert">
+    <h2>This fire needs a little more from your browser.</h2>
+    <p>Campfire draws its flames with WebGL 2, which this browser or device has turned off. Recent Chrome, Edge,
+      Firefox and Safari all have it; if it is turned off in settings, switching it back on brings the fire.</p>
+    <a class="ui-btn" href="#about">Read how the fire works</a>
+  </div>
+</div>
+</div>
+</anvil-block>
+</anvil-form>

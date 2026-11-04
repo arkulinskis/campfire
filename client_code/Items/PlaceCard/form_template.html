@@ -1,0 +1,10 @@
+<div class="cf-place-wrap">
+  <div class="cf-place" anvil:name="card">
+    <div class="cf-place-art" anvil:name="art" role="img"></div>
+    <div class="cf-place-text">
+      <anvil-component type="Label" name="name_label" prop:role='["cf-place-name"]' bind:text="self.item['name']"></anvil-component>
+      <anvil-component type="Label" name="line_label" prop:role='["cf-place-line"]' bind:text="self.item['line']"></anvil-component>
+    </div>
+    <anvil-component type="Button" name="go_button" prop:role='["btn", "btn-sm", "cf-place-go"]'></anvil-component>
+  </div>
+</div>

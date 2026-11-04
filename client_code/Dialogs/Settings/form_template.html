@@ -1,0 +1,59 @@
+<div class="cf-dialog cf-settings">
+  <div class="cf-dialog-head">
+    <h2 class="cf-dialog-title">By the fire</h2>
+    <anvil-component type="Button" name="close_button" prop:text="Close" prop:role='["btn", "btn-ghost", "btn-icon", "ic-x"]'></anvil-component>
+  </div>
+
+  <div class="cf-set-group">
+    <label class="cf-range"><span>The fire</span>
+      <input type="range" min="0" max="100" step="1" anvil:dom-node="fire_vol" anvil:on-dom:input="self.vol_input" data-which="fire" aria-label="Fire sound volume">
+    </label>
+    <label class="cf-range"><span>The night around it</span>
+      <input type="range" min="0" max="100" step="1" anvil:dom-node="night_vol" anvil:on-dom:input="self.vol_input" data-which="night" aria-label="Night sounds volume">
+    </label>
+  </div>
+
+  <div class="cf-set-group">
+    <span class="cf-set-label" id="cf-wind-label">Wind</span>
+    <div class="ui-seg" role="group" aria-labelledby="cf-wind-label">
+      <button type="button" data-v="0" anvil:name="wind_0" anvil:on-dom:click="self.wind_click">Still</button>
+      <button type="button" data-v="1" anvil:name="wind_1" anvil:on-dom:click="self.wind_click">A breeze</button>
+      <button type="button" data-v="2" anvil:name="wind_2" anvil:on-dom:click="self.wind_click">Gusty</button>
+    </div>
+  </div>
+
+  <div class="cf-set-group">
+    <span class="cf-set-label" id="cf-sleep-label">Fall asleep</span>
+    <div class="ui-seg" role="group" aria-labelledby="cf-sleep-label">
+      <button type="button" data-v="0" anvil:name="sleep_0" anvil:on-dom:click="self.sleep_click">Off</button>
+      <button type="button" data-v="20" anvil:name="sleep_20" anvil:on-dom:click="self.sleep_click">20 min</button>
+      <button type="button" data-v="45" anvil:name="sleep_45" anvil:on-dom:click="self.sleep_click">45 min</button>
+      <button type="button" data-v="90" anvil:name="sleep_90" anvil:on-dom:click="self.sleep_click">90 min</button>
+    </div>
+    <p class="cf-set-hint">The fire is left to burn down and the sound fades away over the last five minutes.</p>
+  </div>
+
+  <div class="cf-set-group">
+    <anvil-component type="CheckBox" name="tend_box" prop:text="Keep the fire going: someone adds a log when it burns low"></anvil-component>
+  </div>
+
+  <div class="cf-set-group">
+    <span class="cf-set-label" id="cf-q-label">Picture</span>
+    <div class="ui-seg" role="group" aria-labelledby="cf-q-label">
+      <button type="button" data-v="auto" anvil:name="q_auto" anvil:on-dom:click="self.quality_click">Auto</button>
+      <button type="button" data-v="high" anvil:name="q_high" anvil:on-dom:click="self.quality_click">Finest</button>
+      <button type="button" data-v="medium" anvil:name="q_medium" anvil:on-dom:click="self.quality_click">Balanced</button>
+      <button type="button" data-v="low" anvil:name="q_low" anvil:on-dom:click="self.quality_click">Light</button>
+    </div>
+    <anvil-component type="Label" name="quality_note" prop:role='["cf-set-hint"]'></anvil-component>
+  </div>
+
+  <div class="cf-set-foot">
+    <div class="cf-set-links" anvil:on-dom:click="self.links_click">
+      <a href="#about">How it works</a>
+      <a href="https://prepsto.com/#f/44beb5s" target="_blank" rel="noopener" data-prepsto-open>Submit feedback</a>
+      <button type="button" data-lk-open="overview">Privacy &amp; Terms</button>
+    </div>
+    <anvil-component type="Button" name="done_button" prop:text="Back to the fire" prop:role='["btn", "btn-primary"]'></anvil-component>
+  </div>
+</div>

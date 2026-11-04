@@ -1,0 +1,47 @@
+---
+layout_metadata:
+  title: App frame
+  description: Header and footer around the reading pages; on the fire page both step aside (class "immersive")
+---
+<div class="ui ui-shell">
+  <header class="ui-header">
+    <div class="ui-header-in">
+      <a class="ui-brand" href="#fire" aria-label="Campfire: back to the fire">
+        <img src="_/theme/icon.svg" alt="" width="32" height="32"><span>Campfire</span>
+      </a>
+      <nav class="ui-nav" aria-label="Main">
+        <a href="#fire" anvil:name="nav_fire">The fire</a>
+        <a href="#about" anvil:name="nav_about">How it works</a>
+      </nav>
+      <div class="ui-header-right">
+        <div class="ui-seg cf-theme" role="group" aria-label="Appearance">
+          <button type="button" data-theme-set="auto" anvil:name="theme_auto" anvil:on-dom:click="self.theme_click">Auto</button>
+          <button type="button" data-theme-set="light" anvil:name="theme_light" anvil:on-dom:click="self.theme_click">Light</button>
+          <button type="button" data-theme-set="dark" anvil:name="theme_dark" anvil:on-dom:click="self.theme_click">Dark</button>
+        </div>
+        <a class="ui-btn primary sm cf-back" href="#fire"><i class="ic ic-flame"></i>Back to the fire</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="ui-main">
+    <anvil-slot name="content"></anvil-slot>
+  </main>
+
+  <footer class="ui-footer">
+    <div class="ui-footer-in">
+      <div class="ui-footer-brand">
+        <a class="ui-brand" href="#fire"><img src="_/theme/icon.svg" alt="" width="32" height="32"><span>Campfire</span></a>
+        <p class="muted small">A fire to sit by, made from physics and chance.</p>
+      </div>
+      <div class="ui-footer-links">
+        <a href="#about">How it works</a>
+        <a href="https://prepsto.com/#f/44beb5s" target="_blank" rel="noopener" data-prepsto-open>Submit feedback</a>
+        <button type="button" data-lk-open="overview">Privacy &amp; Terms</button>
+      </div>
+      <div class="ui-footer-legal">
+        <anvil-component type="Label" name="copyright_label" prop:text="© Campfire" prop:role='["fine-print"]'></anvil-component>
+      </div>
+    </div>
+  </footer>
+</div>

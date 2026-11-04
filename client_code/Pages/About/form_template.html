@@ -1,0 +1,162 @@
+<anvil-form layout="Campfire.Layouts.Shell">
+<anvil-block slot="content">
+<div class="cf-about">
+  <section class="ab-hero">
+    <div class="ui-wrap ab-hero-in">
+      <div class="ab-hero-text">
+        <p class="eyebrow">How it works</p>
+        <h1 id="ab-title">A fire you can sit by.</h1>
+        <p class="ab-lead">Campfire isn't a video and it isn't a loop. Every flame you see is computed while you watch, from
+          heat, fuel and air. Every crackle is made on the spot. Nothing about tonight's fire has happened before.</p>
+        <a class="ui-btn primary lg" href="#fire"><i class="ic ic-flame"></i>Go to the fire</a>
+      </div>
+      <figure class="ab-hero-art">
+        <img src="_/theme/place-forest.jpg" alt="A campfire at night among spruce trees, flames rising from three logs, a canvas tent lit orange beside it" width="1200" height="675">
+      </figure>
+    </div>
+  </section>
+
+  <section class="ui-wrap ab-sec" aria-labelledby="ab-what">
+    <h2 id="ab-what">What you are looking at</h2>
+    <div class="ab-grid">
+      <article class="ab-card">
+        <h3>Flames that flow</h3>
+        <p>The flames are a fluid simulation running on your graphics card. Hot gas rises, swirls and pulls in cool air;
+          wood gas burns where it meets oxygen; soot glows, then burns out at the tips. It runs in several thin layers that
+          face you, a method from film effects work, so you see depth without the cost of a full 3D simulation.</p>
+      </article>
+      <article class="ab-card">
+        <h3>The colours of real fire</h3>
+        <p>Glowing soot takes its colour from its temperature: Planck's law for a black body, seen through the standard
+          response of the human eye (CIE 1931). That is why the heart of the fire reads yellow-white and the tips deep
+          orange. Close to the wood, a faint blue shows where fresh gas burns before soot forms.</p>
+      </article>
+      <article class="ab-card">
+        <h3>Light from the flames themselves</h3>
+        <p>The fire lights the camp. The simulation's brightness is measured every couple of frames, and that is what moves
+          the light and the shadows on the stones, the ground and the trees. Your eyes adjust as well: when the fire
+          flares, the night around it gets darker.</p>
+      </article>
+      <article class="ab-card">
+        <h3>Wood that really burns</h3>
+        <p>Every log has a kind of wood, some moisture and a weight. Heat from the flames and the coals dries it, lights
+          it, chars it into glowing cracks and slowly eats it. A teepee falls in when its legs burn through. Logs collapse
+          into the coal bed, and the coals cool over half an hour if nobody tends them.</p>
+      </article>
+      <article class="ab-card">
+        <h3>Sound made live</h3>
+        <p>There are no recordings. Each crackle is a tiny burst of shaped noise, timed by a random process that excites
+          itself: every pop makes another a little more likely for a moment, which is how real fires bunch their crackles.
+          The low roar follows the flames' own flicker. Resin whistles; damp wood hisses.</p>
+      </article>
+      <article class="ab-card">
+        <h3>Chance, every time</h3>
+        <p>The fire takes its randomness from your browser's cryptographic source. Where each flame starts on each log,
+          when the wood pops, when the wind gusts: all of it is decided on the spot. You can't watch the same fire
+          twice.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="ui-wrap ab-sec" aria-labelledby="ab-places">
+    <h2 id="ab-places">Three places</h2>
+    <div class="ab-places">
+      <figure class="ab-place">
+        <img src="_/theme/place-forest.jpg" alt="The fire in the boreal forest at midnight" width="1200" height="675" loading="lazy">
+        <figcaption><b>Boreal midnight.</b> Spruce and pine, a canvas tent, an axe in a stump. Crickets chirp at the pace
+          Dolbear's law gives for a cool summer night; a great horned owl calls; fireflies drift in the trees. No moon, so
+          the Milky Way is bright.</figcaption>
+      </figure>
+      <figure class="ab-place">
+        <img src="_/theme/place-snow.jpg" alt="The fire on a snowy lakeshore under a full moon, a dark treeline across the frozen lake" width="1200" height="675" loading="lazy">
+        <figcaption><b>Lakeshore, first snow.</b> A full moon over a frozen lake. The ice sings and booms, wolves howl far
+          off, snow sometimes falls, and on some nights the northern lights come out.</figcaption>
+      </figure>
+      <figure class="ab-place">
+        <img src="_/theme/place-desert.jpg" alt="The fire in a desert canyon, a dead juniper and a bedroll beside it" width="1200" height="675" loading="lazy">
+        <figcaption><b>Desert canyon.</b> Sandstone walls, a dead juniper, a coffee pot by the stones. Coyote calls echo
+          off the rock, the air is still and the sky is the darkest of the three.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section class="ui-wrap ab-sec" aria-labelledby="ab-try">
+    <h2 id="ab-try">Things to try</h2>
+    <ul class="ab-try">
+      <li><b>Add a log</b> and watch it smoke, then catch. Pine pops and throws sparks; birch flares; maple and mesquite
+        burn slow and leave deep coals.</li>
+      <li><b>Put on a damp branch.</b> It hisses and steams before it gives in.</li>
+      <li><b>Stir the coals</b> (or tap the flames): sparks fly and the embers brighten.</li>
+      <li><b>Walk around the fire</b> by dragging; scroll or pinch to lean in.</li>
+      <li><b>Fall asleep to it.</b> The sleep timer lets the fire burn down and fades the sound away.</li>
+      <li><b>Leave it on.</b> "Keep the fire going" adds a log whenever it burns low.</li>
+      <li><b>Keys:</b> L adds a log, S stirs, M turns the sound off and on, F is full screen, P changes place.</li>
+    </ul>
+  </section>
+
+  <section class="ui-wrap ab-sec" aria-labelledby="ab-faq">
+    <h2 id="ab-faq">Questions</h2>
+    <div class="ab-faq">
+      <details>
+        <summary>Is this a video?</summary>
+        <p>No. Nothing is recorded or looped. The flames, the light, the sparks and every sound are computed in your browser
+          while you watch.</p>
+      </details>
+      <details>
+        <summary>Why does my fire go out?</summary>
+        <p>Because the wood burns. Each log lasts about ten to twenty minutes, depending on the wood. Add another when the
+          fire burns low, or turn on "Keep the fire going". If it goes out completely, strike another match.</p>
+      </details>
+      <details>
+        <summary>Can I fall asleep to it?</summary>
+        <p>Yes. Open the settings and pick 20, 45 or 90 minutes: the fire is left to burn down and the sound fades away over
+          the last five minutes. The fire keeps crackling in a background tab, too.</p>
+      </details>
+      <details>
+        <summary>Will it drain my battery?</summary>
+        <p>It uses the graphics chip, so it uses more power than a web page usually does. If a device struggles, the
+          picture quality steps down by itself. "Light" in the settings is the gentlest.</p>
+      </details>
+      <details>
+        <summary>Does it work on a phone?</summary>
+        <p>Yes, on recent phones and tablets with WebGL 2 (current Safari, Chrome, Firefox and Edge). Headphones make the
+          sound much better.</p>
+      </details>
+      <details>
+        <summary>What does "others by a fire right now" mean?</summary>
+        <p>While the fire burns, your browser tells the server once a minute that someone is sitting by a fire, using a random
+          code made fresh for that visit. The server only counts those codes. Nothing about you is kept, and the codes are
+          erased within the hour.</p>
+      </details>
+      <details>
+        <summary>Is anything recorded about me?</summary>
+        <p>No account, no microphone, no camera. Your place and settings are saved in your own browser. See Privacy &amp;
+          Terms at the bottom of the page.</p>
+      </details>
+    </div>
+  </section>
+
+  <section class="ui-wrap ab-sec ab-craft" aria-labelledby="ab-craft">
+    <h2 id="ab-craft">The craft behind it</h2>
+    <p class="muted">Campfire stands on decades of work by people who studied fire, fluids, light and sound:</p>
+    <ul class="ab-refs">
+      <li>Jos Stam, <i>Stable Fluids</i>, SIGGRAPH 1999: the fluid solver.</li>
+      <li>Ronald Fedkiw, Jos Stam and Henrik Wann Jensen, <i>Visual Simulation of Smoke</i>, SIGGRAPH 2001: vorticity
+        confinement, the small swirls.</li>
+      <li>Andrew Selle and others, <i>An Unconditionally Stable MacCormack Method</i>, 2008: sharp flame edges.</li>
+      <li>Christopher Horvath and Willi Geiger, <i>Directable, High-Resolution Simulation of Fire on the GPU</i>, SIGGRAPH
+        2009: fire in camera-facing slices.</li>
+      <li>Andy Farnell, <i>Designing Sound</i>, MIT Press 2010: crackling, hissing and lapping, built from scratch.</li>
+      <li>Chris Wyman, Peter-Pike Sloan and Peter Shirley, <i>Simple Analytic Approximations to the CIE XYZ Color Matching
+        Functions</i>, 2013: the colours of glowing soot.</li>
+      <li>Jorge Jimenez, <i>Next Generation Post Processing in Call of Duty: Advanced Warfare</i>, SIGGRAPH 2014: the glow
+        around bright flames.</li>
+      <li>Troy Sobotka's AgX view transform: how bright light turns to film.</li>
+      <li>Amos Dolbear, <i>The Cricket as a Thermometer</i>, 1897.</li>
+      <li>three.js, the open-source 3D library the scene is drawn with (MIT licence).</li>
+    </ul>
+    <a class="ui-btn primary lg" href="#fire"><i class="ic ic-flame"></i>Back to the fire</a>
+  </section>
+</div>
+</anvil-block>
+</anvil-form>

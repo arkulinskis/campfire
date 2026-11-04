@@ -1,0 +1,10 @@
+<div class="cf-dialog cf-places-dialog">
+  <div class="cf-dialog-head">
+    <h2 class="cf-dialog-title" id="cf-places-title">Where shall we sit?</h2>
+    <anvil-component type="Button" name="close_button" prop:text="Close" prop:role='["btn", "btn-ghost", "btn-icon", "ic-x"]'></anvil-component>
+  </div>
+  <p class="cf-dialog-lead">The fire comes with you. Each place has its own woods, sky and night sounds.</p>
+  <div class="cf-place-list">
+    <anvil-component type="RepeatingPanel" name="place_panel" prop:item_template="Campfire.Items.PlaceCard" prop:role='["contents"]'></anvil-component>
+  </div>
+</div>

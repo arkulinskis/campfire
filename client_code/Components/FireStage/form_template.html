@@ -1,0 +1,29 @@
+---
+custom_component: true
+properties:
+  - name: place
+    type: string
+    options: [forest, snow, desert]
+    default_value: forest
+    description: Which campsite surrounds the fire
+    default_binding_prop: true
+  - name: quality
+    type: string
+    options: [auto, high, medium, low]
+    default_value: auto
+    description: Simulation size and effects; auto steps down if the device struggles
+events:
+  - name: state_change
+    description: Every second, with state = the fire's state dict (lit, power, logs, coals, woods, minutes ...)
+  - name: fire_event
+    description: Something happened; name = lit, log, stir, collapse, place, quality, slept; data = details
+toolbox_item:
+  title: Fire stage
+  group: Campfire
+help_text: |
+  The live campfire (theme/assets/cf-*.js through client_code/fire.py): a full-size WebGL canvas with sound.
+  One fire per page load: it keeps burning while another page is open. Call light(), add_log(key, wet), stir().
+---
+<div class="cf-stage-wrap">
+  <div class="cf-stage" anvil:name="box"></div>
+</div>

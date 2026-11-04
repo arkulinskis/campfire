@@ -1,0 +1,33 @@
+/* theme.css: Anvil puts this file in the page itself, so it applies before the app has loaded.
+   It styles Anvil's loading spinner (shown while the app starts and during server calls) as the app icon
+   (the tile shows theme/assets/icon.svg). Keep the colours in step with app.css.
+   Anvil substitutes its theme-colour tokens (percent sign, "color:", a name, percent sign) in this file,
+   so never write that pattern here. */
+html, body { background: #07080a; }  /* Campfire opens in the dark, whatever the theme (the About page sets its own) */
+
+html .anvil-spinner, #loadingSpinner {
+  --anvil-spinner-size: 88px;
+  width: 88px !important; height: 88px !important; top: calc(50% - 44px); left: calc(50% - 44px);
+  border-radius: 26px !important; background: #140d09 !important; background-image: none !important; color: transparent;
+  box-shadow: 0 10px 50px rgba(255, 110, 30, .28), 0 0 0 1px rgba(255, 160, 90, .18) !important;
+  animation: app-breathe 1.4s ease-in-out infinite;
+}
+html .anvil-spinner .anvil-spinner-svg, #loadingSpinner > svg, #loadingSpinner > img { display: none !important; }
+html .anvil-spinner::after, #loadingSpinner::after {
+  content: ""; position: absolute; inset: 14px; border-radius: 16px;
+  background: url("_/theme/icon.svg") center / contain no-repeat;
+}
+/* loader:start fill brand=#ff8a3d (made by APP_MAKER/tools/loaders.py; rerun it instead of editing) */
+html .anvil-spinner, #loadingSpinner { animation: none; }
+html .anvil-spinner::before, #loadingSpinner::before {
+  content: ""; position: absolute; inset: 14px; border-radius: 16px; z-index: 1;
+  backdrop-filter: grayscale(1) brightness(1.25); -webkit-backdrop-filter: grayscale(1) brightness(1.25);
+  animation: app-fill 1.8s ease-in-out infinite;
+}
+@keyframes app-fill { 0% { clip-path: inset(0 0 0 0); } 75%, 100% { clip-path: inset(0 0 100% 0); } }
+@keyframes app-breathe { 50% { transform: scale(.94); } }
+/* loader:end */
+@media (prefers-reduced-motion: reduce) {
+  html .anvil-spinner, #loadingSpinner { animation: none; }
+  html .anvil-spinner::before, #loadingSpinner::before { animation-duration: 3s; }
+}
