@@ -22,14 +22,26 @@ db_schema:
     server: full
     title: Embers
 metadata:
-  description: 'A real campfire, simulated live in your browser: flames from a fluid simulation, crackles made from random
-    physics, logs that char and collapse. Three campsites. No sign-up.'
-  logo_img: asset:icon-512.png
-  title: Campfire
+  description: "A campfire simulated live: fluid-simulated flames, crackles made by chance, logs that char and fall in. Three campsites, a sleep timer, no sign-up."
+  logo_img: "asset:icon-512.png"
+  title: "Campfire: a real fire, simulated live in your browser"
 name: Campfire
 native_deps:
   head_html: |
     <script src="_/theme/legal-kit.js?v=b8c526f9be"></script>
+    <!-- seo:start (APP_MAKER/seo: edit seo/apps/campfire.json and run seo.py, not here) -->
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
+    <meta name="keywords" content="virtual campfire, campfire sounds, fireplace ambience, crackling fire sounds for sleep, realistic fire simulation, relaxing fire online, campfire white noise, webgl fire simulation, procedural fire sound, campfire screensaver">
+    <meta name="author" content="Arkvital">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Campfire">
+    <meta property="og:title" content="Campfire: a real fire, simulated live in your browser">
+    <meta property="og:description" content="A campfire simulated live: fluid-simulated flames, crackles made by chance, logs that char and fall in. Three campsites, a sleep timer, no sign-up.">
+    <meta property="og:locale" content="en_CA">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Campfire: a real fire, simulated live in your browser">
+    <meta name="twitter:description" content="A campfire simulated live: fluid-simulated flames, crackles made by chance, logs that char and fall in. Three campsites, a sleep timer, no sign-up.">
+    <!-- seo:end -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#07080a">
     <meta name="apple-mobile-web-app-capable" content="yes">
