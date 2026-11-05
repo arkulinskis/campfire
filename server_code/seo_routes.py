@@ -66,8 +66,8 @@ SEO = {
   ]
  ],
  "free": True,
- "site": "",
- "updated": "2026-11-04",
+ "site": "https://campfire.anvil.app",
+ "updated": "2026-11-05",
  "icon": "icon-512.png",
  "colors": {
   "bg": "#07080a",
