@@ -70,6 +70,73 @@
     key('l'); await until(() => st().logs === n2 + 1, 'key L');
     key('s'); await until(() => F().stirBoost > 0.5, 'key S');
     ok(true, 'keys: L adds a log, S stirs');
+
+    // ---- someone else sits down: the circle (a second visitor played through the server by the test hook)
+    await until(() => window.CF_TEST && window.CF_TEST.circle, 'the circle test hook');
+    const C = window.CF_TEST.circle;
+    let me = await C.pulse();
+    for (let w = 0; w < 20 && me.circle.people.length >= 5; w++) {   // back-to-back runs: wait for a seat to free up (3 min at most)
+      if (!w) say('note: my circle is full of visitors from earlier runs; waiting for a seat');
+      await sleep(10000); me = await C.pulse();
+    }
+    const n0 = me.circle.people.length;   // visitors from a test run in the last 3 minutes may still be sitting here
+    if (n0) say('note: ' + n0 + ' visitor(s) left over from an earlier run share this circle');
+    ok(me.circle && me.circle.id && F().people.count() === n0, 'seated in a circle (' + me.circle.name + '), ' + n0 + ' others drawn');
+    if (!n0) ok(!vis(btn('.cf-tray button', 'Wave')), 'alone: no Wave button');
+    const vsid = 'visitor-' + Date.now();
+    const vb = await C.visitor(vsid, 'beat');
+    ok(vb.ok && vb.circle.id === me.circle.id && (n0 || vb.circle.seat === 3), 'a second visitor at the same place joins my circle' + (n0 ? '' : ', across the fire (seat 3)'));
+    me = await C.pulse();
+    const vname = vb.circle.name, vseat = vb.circle.seat;
+    ok(me.circle.people.length === n0 + 1 && me.circle.people.some((p) => p.name === vname), 'my heartbeat: ' + vname + ' is in my circle');
+    await until(() => F().people.count() === n0 + 1, 'an avatar');
+    const pl = F().people.list().find((p) => p.name === vname);
+    if (!n0) ok(pl.k === 3 && pl.z < -2.3 && Math.abs(pl.x - 0.86) < 0.1, vname + ' sits on the seat log across the fire, beside the flames (' + pl.x + ', ' + pl.z + ', ' + pl.hat + ')');
+    await until(() => text($('.anvil-role-cf-feed-text')) === vname + ' sat down by the fire.', 'the arrival line');
+    ok(vis($('.cf-feed')) && text($('.anvil-role-cf-feed-text')).indexOf(vname) === 0, 'news: "' + text($('.anvil-role-cf-feed-text')) + '"');
+    ok(/^You're \w+\. .+ by this fire with you\./.test(text($('.anvil-role-cf-presence'))), 'presence: "' + text($('.anvil-role-cf-presence')) + '"');
+    await until(() => vis(btn('.cf-tray button', 'Wave')), 'the Wave button');
+    ok(true, 'company: a Wave button joins the tray');
+    const tag = await until(() => $$('.cf-people .cf-tag').find((t) => t.getAttribute('aria-label') === 'Wave to ' + vname), 'the name tag');
+    ok(tag.textContent.indexOf(vname) >= 0, 'a name tag over ' + vname + ' (a button: "Wave to ' + vname + '")');
+    // they wave to me, throw a log in, stir
+    const logsBefore = new Set(F().logs), t0 = vb.circle.t;
+    ok((await C.visitor(vsid, 'wave', me.circle.seat)).ok && (await C.visitor(vsid, 'log', null, 'maple', false)).ok && (await C.visitor(vsid, 'stir')).ok,
+      'the visitor waves to me, puts a maple log on and stirs (server accepted all three)');
+    F().stirBoost = 0;
+    await C.pulse();
+    await until(() => /waves to you/.test(text($('.anvil-role-cf-feed-text'))), 'their wave');
+    ok(F().people.list().find((p) => p.name === vname).act === 'wave' && vis(btn('.cf-feed button', 'Wave back')), 'their avatar waves: "' + vname + ' waves to you." + Wave back');
+    ok(tag.classList.contains('is-to-you') && /waves to you/.test(tag.textContent), 'their tag says "waves to you"');
+    const vp = () => F().people.all().find((p) => p.name === vname);
+    await until(() => vp().queue.length >= 2, 'the log and the stir waiting their turn', 9000);   // they arrive 1.7 s apart
+    ok(vp().queue.map((q) => q.kind).join(',') === 'log,stir', 'one thing at a time: the log and the stir wait for the wave to finish');
+    for (let i = 0; i < 12 && !F().logs.some((l) => l.name === 'maple' && !logsBefore.has(l)); i++) F().people.update(0.4, F().time, F().camera, false);   // headless Chrome draws ~2 frames a second: fast-forward the people
+    await until(() => F().logs.some((l) => l.name === 'maple' && !logsBefore.has(l)), 'their log', 8000);
+    ok(true, 'their maple log lands in my fire, thrown from their seat');
+    for (let i = 0; i < 12 && F().stirBoost <= 0.5; i++) F().people.update(0.4, F().time, F().camera, false);
+    await until(() => F().stirBoost > 0.5, 'their stir', 8000);
+    ok(/^\w+ stirs the fire\.$/.test(text($('.anvil-role-cf-feed-text'))), 'their stir: the coals brighten in my fire too, "' + text($('.anvil-role-cf-feed-text')) + '"');
+    // I answer
+    await click('.cf-people .cf-tag', 'Wave to ' + vname);
+    await until(() => text($('.anvil-role-cf-feed-text')) === 'You wave to ' + vname + '.', 'my wave');
+    ok(true, 'pressing their name tag: "You wave to ' + vname + '."');
+    key('w');
+    await until(() => text($('.anvil-role-cf-feed-text')) === 'You wave to everyone.', 'key W');
+    ok(true, 'key W: "You wave to everyone."');
+    const nb = await C.visitor(vsid, 'beat', t0);
+    const got = nb.circle.news.map((n) => n.kind + ':' + n.seat + ':' + n.to);
+    ok(got.includes('wave:' + me.circle.seat + ':' + vseat) && got.includes('wave:' + me.circle.seat + ':null'), 'the visitor\'s next heartbeat brings my waves (' + got.join(', ') + ')');
+    const own = st().logs;
+    await click('.cf-tray .anvil-role-cf-wood button', 'Birch');
+    await until(() => st().logs === own + 1, 'my birch');
+    const nb2 = await C.visitor(vsid, 'beat', nb.circle.t);
+    ok(nb2.circle.news.some((n) => n.kind === 'log' && n.wood === 'birch'), 'my birch log is shared with the circle');
+    // tapping the person (not the tag) also waves
+    const pp = F().people.all().find((p) => p.name === vname), cam = F().camera, rect = F().canvas.getBoundingClientRect();
+    const hd = pp.headPos().project(cam), hip = pp.worldPos().project(cam);
+    const cx = (hd.x * 0.5 + 0.5) * rect.width + rect.left, cy = ((0.5 - hd.y * 0.5) + (0.5 - hip.y * 0.5)) / 2 * rect.height + rect.top;
+    ok(F().people.hit(cx, cy) === vseat && F().people.hit(rect.left + 4, rect.top + 4) === -1, 'a tap on the person finds their seat, a tap elsewhere does not');
     // the fire has room for nine logs, then says so
     for (let i = 0; i < 8; i++) F().addLog('pine');
     await click('.cf-tray .anvil-role-cf-wood button', 'Pine');
@@ -86,6 +153,9 @@
       'Go here: the fire moves to the lakeshore (colours + remembered)');
     await until(() => $$('.cf-tray .anvil-role-cf-wood button').map(text).includes('Spruce'), 'snow woods');
     ok(st().logs > 0 && st().lit, 'the fire comes along, still burning (' + st().logs + ' logs)');
+    ok(F().people.count() === 0 && !vis(btn('.cf-tray button', 'Wave')), 'a new place, a new circle: the forest visitor is not here');
+    const sn = await C.pulse();
+    ok(sn.circle && sn.circle.id !== me.circle.id && /^c-snow-/.test(sn.circle.id), 'the next heartbeat seats me in a lakeshore circle');
     ok(text($('.cf-top .anvil-role-cf-glass button')) === 'Lakeshore, first snow', 'the place button names the new place');
 
     // ---- settings

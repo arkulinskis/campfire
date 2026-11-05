@@ -196,6 +196,7 @@
     g.scale(size * (1 + (seed % 3) * 0.1), size * (flat || 0.7), size * 0.9);
     return g;
   }
+  CF.rockGeo = rock; CF.rockMat = rockMat;   // cf-people.js seats people on rocks in the desert
 
   // ------------------------------------------------------------------ wood: logs, branches, trees
   // a log along X, radius r, length L; split = a half log with a flat face; aEnd marks caps (1) and the split face (2)
@@ -601,7 +602,8 @@
         var sg = new THREE.IcosahedronGeometry(1, 2); CF.lumpy(sg, 0.4, 2, i); CF.tint(sg, 0.07, 0.07, 0.045);
         var sh = new THREE.Mesh(sg, shrubM); var ss = tr.range(0.2, 0.5); sh.scale.set(ss * 1.3, ss * 0.7, ss * 1.2); sh.position.set(tx, P.height(tx, tz) + ss * 0.2, tz); scene.add(sh);
       }
-      var roll = new THREE.Mesh(bedrollGeo(), canvasMat(0)); roll.position.set(-1.9, 0, -1.3); roll.rotation.y = 0.9; roll.castShadow = true; scene.add(roll); W.casters.push(roll);
+      var roll = new THREE.Mesh(bedrollGeo(), canvasMat(0)); roll.position.set(-2.9, 0, -1.9);   // clear of the seats people sit on (cf-people.js)
+      roll.rotation.y = 0.9; roll.castShadow = true; scene.add(roll); W.casters.push(roll);
       var pot = new THREE.Mesh(potGeo(), std({ vertexColors: true, roughness: 0.55, metalness: 0.6 })); pot.position.set(0.68, 0.11, 0.28); pot.rotation.y = 2; pot.castShadow = true; scene.add(pot); W.casters.push(pot);
       W.wood = { x: 2.0, z: 1.7 };
     }

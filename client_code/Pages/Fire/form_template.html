@@ -37,9 +37,16 @@
       <div class="cf-tray" role="group" aria-label="Tend the fire">
         <anvil-component type="RepeatingPanel" name="wood_panel" prop:item_template="Campfire.Items.WoodButton" prop:role='["contents"]'></anvil-component>
         <anvil-component type="Button" name="stir_button" prop:text="Stir" prop:role='["btn", "cf-wood", "cf-stir", "ic-stir"]' prop:tooltip="Stir the coals (S)"></anvil-component>
+        <anvil-component type="Button" name="wave_button" prop:text="Wave" prop:role='["btn", "cf-wood", "cf-wave", "ic-wave"]' prop:tooltip="Wave to everyone by this fire (W). Tap someone to wave to them."></anvil-component>
         <anvil-component type="Button" name="relight_button" prop:text="Strike a match" prop:role='["btn", "cf-wood", "cf-relight", "ic-flame"]'></anvil-component>
       </div>
     </div>
+  </div>
+
+  <!-- news from the circle: stays visible while the controls are faded away -->
+  <div class="cf-feed" anvil:name="feed">
+    <anvil-component type="Label" name="feed_label" prop:role='["cf-feed-text"]'></anvil-component>
+    <anvil-component type="Button" name="wave_back_button" prop:text="Wave back" prop:role='["btn", "btn-sm", "cf-glass", "ic-wave"]'></anvil-component>
   </div>
 
   <div class="cf-fallback" anvil:name="fallback" role="alert">

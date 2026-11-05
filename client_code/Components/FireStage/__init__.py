@@ -1,4 +1,6 @@
 from anvil import *
+import json
+
 import anvil.js
 from anvil.js import window
 
@@ -108,6 +110,17 @@ class FireStage(FireStageTemplate):
     def look(self, amount):
         if self._ready():
             self._engine.look(float(amount))
+
+    # ---- the people around the fire (your circle)
+    def set_circle(self, circle):
+        """circle = the server's {seat, people: [{seat, name, look}]}, or None: nobody else sits here."""
+        if self._ready():
+            self._engine.setCircle(json.dumps({"seat": circle["seat"], "people": circle["people"]}) if circle else "")
+
+    def circle_act(self, seat, kind, to=None, wood=None, wet=False):
+        """Play what someone in the circle did: a wave (to a seat, or everyone), a log thrown in, a stir."""
+        if self._ready():
+            self._engine.circleAct(int(seat), str(kind), -1 if to is None else int(to), wood or "", bool(wet))
 
     def state(self):
         return fire.state(self._engine) if self._ready() else {"ok": False, "lit": False}

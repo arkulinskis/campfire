@@ -8,11 +8,12 @@ description: Context, workflow and recipes for Campfire (folder campfire), the u
 **What it is:** one feature page: arrive in the dark beside a laid fire, strike a match, tend it (three woods per
 place + a damp branch, stir), watch and listen. Three places (forest / snow lakeshore / desert canyon), settings
 (volumes, wind, sleep timer, keep it going, quality), an About page explaining how it works. No users, no sign-in;
-the only server feature is the anonymous "You and N others are by a fire right now" count.
+the server keeps the anonymous "You and N others are by a fire right now" count and seats visitors at the same
+place in circles of up to six: the others sit around your fire, and waves, logs and stirs are shared slowly.
 
 **Where it lives:**
 - Folder `C:\Users\arkvi\Documents\CLAUDE\campfire\` = the git clone of **github.com/arkulinskis/campfire**, branch `master`.
-  "git" layout: the folder *is* the Anvil app. Anvil pulls master; pushing is the deploy. Live: not yet.
+  "git" layout: the folder *is* the Anvil app. Anvil pulls master; pushing is the deploy. Live: https://campfire.anvil.app
 - Made from `C:\Users\arkvi\Documents\CLAUDE\APP_MAKER\template-forms` (native Anvil Forms, Nov 2026). Anvil's own agent
   skills describe the same model: `client-forms`, `data-models`, `server-code`, `client-modules`, `anvil-yaml`
   (github.com/anvil-works/anvil-agent-references; see APP_MAKER/ANVIL_NOTES.md, "Native Anvil Forms").
@@ -53,12 +54,13 @@ client_code/
   fire.py                  the one door to the JS engine (PLACES, start, state)
   legal.py                 Privacy & Terms (installed from APP_MAKER/legal-kit; don't edit here)
   Layouts/Shell            slim header + footer; refresh("fire") adds "immersive" (both hidden)
-  Pages/Fire               the fire: intro, controls, status, presence, keys, idle fade
+  Pages/Fire               the fire: intro, controls, status, presence + the circle (heartbeat, news line, waves,
+                           shared logs/stirs), keys (W = wave), idle fade; CF_TEST.circle test hooks
   Pages/About              how it works (static copy)
   Components/FireStage     custom component around the engine (events state_change, fire_event)
   Items/WoodButton         a wood in the tray (x-add);  Items/PlaceCard: a campsite in the picker (x-pick)
   Dialogs/Places, Settings place picker; sound/wind/sleep/auto-tend/quality (load/apply live in Settings/__init__)
-server_code/               common.py (C.*), Presence.py (ember_heartbeat), SchemaCheck.py, legal_server.py
+server_code/               common.py (C.*), Presence.py (ember_heartbeat, circle_act), SchemaCheck.py, legal_server.py
 theme/assets/              cf-*.js (the engine), three.min.js, app.css (tokens + pages + role layer), icons.css
                            (generated), app-kit.js, theme.css (spinner), icon.svg + PNGs, place-*.jpg
 tools/                     check.py, assets.py, build_icons.py, make_icons.py, ui_test.py + ui/ (flow, phone, a11y),
@@ -132,8 +134,16 @@ tools/                     check.py, assets.py, build_icons.py, make_icons.py, u
 - `cf-engine.js` CF.create/CF.shared; wood model (updateFire), spots, step (sim, readback, lights, exposure, draw),
   camera + input, API: light, addLog, stir, setPlace, setWind, setVolume, setAutoTend, setSleep, sound, state, warp,
   attach, pause, setHandlers. `window.CF_TEST = {quality: 'low'}` (set by `?cftest=1`) for tests.
+- `cf-people.js` CF.People (engine.people): the others in your circle. SEATS = a per-viewer arc ACROSS the fire
+  (k = seat - mySeat mod 6; k = 3, the second arrival, on the seat log right of the flames, not behind them); people
+  beside the camera would be huge. Person = merged geometries: legs + lap blanket (lapGeo) + lathe body + blanket
+  upper arms (blanket material CF.patch BLANKET: plaid uniform), sleeves/hands/head/hat vertex-coloured. Idle
+  life (rest/warm/look/sky), actions queued one at a time (wave 3.4 s, log toss 1.25 s, stir 2 s); a log/stir's
+  effect fires once (`effect`), also when the queue overflows or the person leaves, so logs always land. Name tags
+  = DOM buttons in `.cf-people` (inside the stage), projected every drawn frame; `hit(x, y)` for taps on bodies.
+  Engine API: setCircle(json), circleAct(seat, kind, to, wood, wet), addLog(wood, wet, fromPos), onEvent('wave_to').
 - Python side: `client_code/fire.py` (one door), `Components/FireStage` (custom component, events state_change and
-  fire_event), `Pages/Fire` (UI, status text, idle fade, keys, presence heartbeat).
+  fire_event; set_circle, circle_act), `Pages/Fire` (UI, status text, idle fade, keys, heartbeat + circle).
 - **Dev loop for looks:** a standalone harness (index.html loading three + cf-*.js, served locally) driven by
   tools/live/drive.mjs with SwiftShader; `fire.warp(sec)` ages the fire without drawing. Look at 3 frames ~1 s apart.
 
@@ -148,7 +158,24 @@ tools/                     check.py, assets.py, build_icons.py, make_icons.py, u
   (`python -I APP_MAKER/tools/loaders.py apply campfire <preset>`), `LEGAL_THEME` in startup.py.
 - **Icon:** edit theme/assets/icon.svg, `python -I tools/make_icons.py`, then `python tools/assets.py`.
 
+- **The circle (Presence.py):** `ember_heartbeat(sid, place, since, count)` seats/keeps you (`_join`: fullest open
+  circle at the place, FILL order 0,3,1,4,2,5, unique animal name, re-pick on a seat clash) and returns
+  `{circle: {id, seat, name, people: [{seat, name, look}], news, t}, others?}`; pass the last `t` as `since` (news
+  re-sent for OVERLAP 20 s, the page skips seen ids). `circle_act(sid, kind, to, wood, wet)`: wave/log/stir only,
+  no text. Visit codes never leave the server (look = a hash). Tests: tools/testing/test_server.py (circles, 31
+  visitors -> circles of <= 6, news only to others, rate limits) and flow.js (a second visitor via
+  `CF_TEST.circle.visitor(sid, kind, ...)` + `pulse()`).
+- **Looking at the people:** stage a circle in a shot with `F.setCircle(json)` then `F.setCircle = () => 0` (or the
+  page's own heartbeat replaces it), `p.setFade(1)`, and step `F.people.update(0.1, ...)`; call ui_test.start()
+  first or the App Server serves the old files.
+
 ## Gotchas
+- Headless Chrome draws ~2 frames a second with SwiftShader and dt is capped at 0.1 s, so people's animations run
+  ~5x slow in tests: flow.js fast-forwards them with `F().people.update(0.4, ...)`. Visitors from a run in the
+  last 3 minutes still sit in the test circle (flow.js copes, waits if the circle is full).
+- The local App Server 1.18's auto-migrate lost two of four columns added to one table at once (log: "attempted to
+  update nonexistent column"); each `ui_test.py --restart` added the next one. Restart until the log has no
+  "schema out of date" (hosted Anvil: the Schema Mismatch step adds all of them).
 
 - **Anvil puts a `<base href>` in the page**: a plain `<a href="#about">` resolves against the bare app address, so
   with a query string (?utm_source, ?cftest=1) the click reloads the whole app. router.py intercepts `a[href^="#"]`

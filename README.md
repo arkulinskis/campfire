@@ -6,7 +6,7 @@ at one of three campsites. No accounts, no sign-up. Built on [Anvil](https://anv
 fire itself is a JavaScript engine (three.js r158 + Campfire's own simulation, world and sound) in `theme/assets/cf-*.js`.
 
 - **App repo:** github.com/arkulinskis/campfire (branch `master`). Anvil pulls `master`.
-- **Live:** not published yet (Prepsto link's site guessed as https://campfire.anvil.app).
+- **Live:** https://campfire.anvil.app
 
 ## What it does
 
@@ -45,6 +45,21 @@ fire itself is a JavaScript engine (three.js r158 + Campfire's own simulation, w
   place, sound, settings, full screen. Controls fade after 4.5 s of stillness. Keys L / S / M / F / P. Tap the
   flames to stir. Drag to walk around, wheel/pinch to lean in. Status line ("Burning well. · 12 minutes by the fire").
 - "You and N others are by a fire right now": anonymous heartbeat (random code per page load, table `embers`).
+
+**The circle: people around your fire** (since 2026-11-05)
+- Everyone by a fire at the same campsite is seated in a circle of at most six (the fullest circle with room, else a
+  new one), so hundreds of visitors make many small circles. The second person sits across the fire from the first.
+- The others sit around your fire as figures wrapped in wool blankets (plaid or plain, beanies, hoods, brim hats in
+  the desert) on log rounds (rocks in the desert; the second person on the seat log), lit only by the firelight.
+  They breathe, warm their hands, glance at each other or at you, look up at the sky. Each gets an animal name for
+  the visit (Fox, Heron, Wren...); their look comes from their random visit code. Nothing identifies anyone.
+- Slow, not live: the browser checks in every 15 s with company (30 s alone, 60 s in a background tab) and plays
+  what the circle did since, one thing at a time per person: a wave (to everyone, to one person, to you), a log
+  tossed into the fire from where they sit (it lands in YOUR fire too, the same wood, damp or not), a stir.
+- Wave: the Wave button (W) waves to everyone; press someone's name tag or tap them to wave to them; "Heron waves
+  to you." comes with a Wave back button. A news line at the top (visible even while the controls are faded)
+  says who sat down, left, waved, added a log or stirred. Your logs and stirs are shared with your circle.
+- No text, no chat. News is kept for ten minutes (table `circle_news`).
 - Settings dialog: fire / night volumes, wind (still / breeze / gusty), sleep timer (20/45/90 min, the fire burns down
   and the sound fades over the last 5 min), keep the fire going (auto-tend), picture quality (auto steps down).
 - Place picker dialog with real renders of each place (`theme/assets/place-*.jpg`).
@@ -55,7 +70,7 @@ fire itself is a JavaScript engine (three.js r158 + Campfire's own simulation, w
 ## Setting it up in Anvil (once)
 
 1. Anvil editor: **Create app → Clone from GitHub**, paste `https://github.com/arkulinskis/campfire`.
-2. Accept the **Schema Mismatch** alert with **"The schema of the source code is correct"** (creates `embers`).
+2. Accept the **Schema Mismatch** alert with **"The schema of the source code is correct"** (creates `embers` and `circle_news`).
 3. **Run**, then **Publish**. There is no Users service and nobody to sign up.
 
 <!-- libraries:start -->
@@ -92,9 +107,9 @@ git push origin master                   # deploy
 ```
 client_code/    startup.py, router.py, state.py, fire.py (the door to the engine), legal.py;
                 Layouts/Shell, Pages/Fire + About, Components/FireStage, Items/WoodButton + PlaceCard, Dialogs/Places + Settings
-server_code/    common.py, Presence.py (others by a fire), SchemaCheck.py, legal_server.py
+server_code/    common.py, Presence.py (others by a fire, circles of six, waves/logs/stirs), SchemaCheck.py, legal_server.py
 theme/assets/   cf-core.js (random, noise, blackbody), cf-fire.js (the GPU combustion sim), cf-fx.js (sparks, smoke,
-                motes, post), cf-world.js (the three places, materials), cf-audio.js (sound), cf-engine.js (wood model,
-                camera, API), three.min.js (r158), app.css, app-kit.js, theme.css (spinner), icons, place-*.jpg
+                motes, post), cf-world.js (the three places, materials), cf-audio.js (sound), cf-people.js (the people in
+                your circle), cf-engine.js (wood model, camera, API), three.min.js (r158), app.css, app-kit.js, theme.css (spinner), icons, place-*.jpg
 tools/          check.py, assets.py, build_icons.py, make_icons.py, ui_test.py + ui/ (flow, phone, a11y), live/drive.mjs, testing/
 ```

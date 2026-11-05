@@ -1,5 +1,51 @@
 allow_embedding: false
 db_schema:
+  circle_news:
+    client: none
+    columns:
+    - admin_ui:
+        order: 0
+        width: 200
+      name: circle
+      type: string
+    - admin_ui:
+        order: 1
+        width: 200
+      name: nid
+      type: string
+    - admin_ui:
+        order: 2
+        width: 200
+      name: seat
+      type: number
+    - admin_ui:
+        order: 3
+        width: 200
+      name: kind
+      type: string
+    - admin_ui:
+        order: 4
+        width: 200
+      name: to_seat
+      type: number
+    - admin_ui:
+        order: 5
+        width: 200
+      name: wood
+      type: string
+    - admin_ui:
+        order: 6
+        width: 200
+      name: wet
+      type: bool
+    - admin_ui:
+        order: 7
+        width: 200
+      name: at
+      type: datetime
+    indexes: []
+    server: full
+    title: Circle news
   embers:
     client: none
     columns:
@@ -18,17 +64,38 @@ db_schema:
         width: 200
       name: seen
       type: datetime
+    - admin_ui:
+        order: 3
+        width: 200
+      name: circle
+      type: string
+    - admin_ui:
+        order: 4
+        width: 200
+      name: seat
+      type: number
+    - admin_ui:
+        order: 5
+        width: 200
+      name: name
+      type: string
+    - admin_ui:
+        order: 6
+        width: 200
+      name: joined
+      type: datetime
     indexes: []
     server: full
     title: Embers
 metadata:
-  description: "A campfire simulated live: fluid-simulated flames, crackles made by chance, logs that char and fall in. Three campsites, a sleep timer, no sign-up."
-  logo_img: "asset:icon-512.png"
-  title: "Campfire: a real fire, simulated live in your browser"
+  description: 'A campfire simulated live: fluid-simulated flames, crackles made by chance, logs that char and fall in. Three
+    campsites, a sleep timer, no sign-up.'
+  logo_img: asset:icon-512.png
+  title: 'Campfire: a real fire, simulated live in your browser'
 name: Campfire
 native_deps:
   head_html: |
-    <script src="_/theme/legal-kit.js?v=b8c526f9be"></script>
+    <script src="_/theme/legal-kit.js?v=ab658df268"></script>
     <!-- seo:start (APP_MAKER/seo: edit seo/apps/campfire.json and run seo.py, not here) -->
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
     <meta name="keywords" content="virtual campfire, campfire sounds, fireplace ambience, crackling fire sounds for sleep, realistic fire simulation, relaxing fire online, campfire white noise, webgl fire simulation, procedural fire sound, campfire screensaver">
@@ -72,17 +139,18 @@ native_deps:
 
     <!-- Prepsto feedback panel: every "Submit feedback" link and button opens it (it is the only feedback channel). No floating button, no cookies, nothing loads until it is opened. Codes: APP_MAKER/prepsto-links.json -->
     <script src="https://prepsto.com/_/theme/widget.js" data-prepsto="44beb5s" data-button="false" data-label="Submit feedback" async></script>
-    <link rel="stylesheet" href="_/theme/icons.css?v=5d58495b18">
-    <link rel="stylesheet" href="_/theme/app.css?v=9aad354f53">
-    <script src="_/theme/app-kit.js?v=f84e977e24"></script>
+    <link rel="stylesheet" href="_/theme/icons.css?v=f05ad3f9a4">
+    <link rel="stylesheet" href="_/theme/app.css?v=788ee34930">
+    <script src="_/theme/app-kit.js?v=12bffa8103"></script>
     <!-- the fire engine (three.js r158 + Campfire's own simulation, world, sound) -->
     <script src="_/theme/three.min.js?v=3bfa54fdd7"></script>
     <script src="_/theme/cf-core.js?v=3b18e9aa2b"></script>
     <script src="_/theme/cf-fire.js?v=8791711a76"></script>
     <script src="_/theme/cf-fx.js?v=df05e1b391"></script>
-    <script src="_/theme/cf-world.js?v=23c52d313f"></script>
+    <script src="_/theme/cf-world.js?v=939d96be42"></script>
+    <script src="_/theme/cf-people.js?v=7c7babda7f"></script>
     <script src="_/theme/cf-audio.js?v=38e01f232e"></script>
-    <script src="_/theme/cf-engine.js?v=c72cd1da90"></script>
+    <script src="_/theme/cf-engine.js?v=a4472d6d8d"></script>
 package_name: Campfire
 runtime_options:
   client_version: '3'

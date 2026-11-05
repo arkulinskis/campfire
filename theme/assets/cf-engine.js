@@ -10,6 +10,8 @@
    fire.light()  fire.addLog(species, wet)  fire.stir()  fire.setPlace(p)  fire.setWind(0..2)  fire.setVolume(which, v)
    fire.setAutoTend(bool)  fire.setSleep(minutes)  fire.state()  fire.warp(seconds)  fire.destroy()
    fire.attach(element)  fire.pause(bool)  fire.setHandlers(onState, onEvent)
+   fire.setCircle(json)  fire.circleAct(seat, kind, toSeat, wood, wet): the people around the fire (cf-people.js);
+   onEvent('wave_to', seat) when you tap someone or their name tag.
    CF.shared(element, opts): one fire per page load (it keeps burning, and crackling, while another page is open).
    window.CF_TEST: {norender: bool} for tests. */
 (function () {
@@ -71,6 +73,7 @@
     this.audio.onPop = function (log) { self.pop(log); };
     this.fps = 60; this.slowFor = 0;
     this.buildFire();
+    this.people = CF.People ? new CF.People(this) : null;   // the others in your circle (cf-people.js)
     this.setPlace(this.opts.place || 'forest', true);
     this.layTeepee();
     this.bindInput();
@@ -119,6 +122,7 @@
     var cl = this.coalLight = new THREE.PointLight(0xff4410, 0, 0, 2); cl.position.set(0, 0.09, 0); W.scene.add(cl);
     var keep = this.logs; this.logs = [];
     keep.forEach(function (lg) { W.scene.add(lg.mesh); this.logs.push(lg); }, this);
+    if (this.people) this.people.setWorld(W);
     if (this.motes) this.transp.remove(this.motes.points);
     this.motes = W.motesKind === 'none' ? { on: false, kind: 'none' } : new CF.Motes(W.motesKind, W.motesKind === 'snow' ? (this.q.name === 'low' ? 500 : 1100) : W.motesKind === 'fireflies' ? 28 : 160, W.motesKind === 'fireflies' ? 26 : 14);
     if (W.motesKind === 'snow') this.motes.on = CF.rng.chance(0.6);
@@ -213,12 +217,13 @@
     }
     return best;
   }
-  Campfire.prototype.addLog = function (spName, wet) {
+  // from: where the throw starts (someone else's hand); without it, from in front of you
+  Campfire.prototype.addLog = function (spName, wet, from) {
     if (this.logs.filter(function (l) { return !l.kind; }).length >= 9) return false;
-    var name = spName || CF.rng.pick(this.world.def.woods);
+    var name = CF.SPECIES[spName] && spName !== 'kindling' ? spName : CF.rng.pick(this.world.def.woods);
     var lg = this.makeLog(name, { wet: wet }), rest = this.restPose(lg);
-    // thrown in from in front of you, along an arc
-    var c = this.camera.position, start = new V(c.x * 0.75, 0.55, c.z * 0.75);
+    // thrown in along an arc
+    var c = this.camera.position, start = from ? new V(from.x, from.y, from.z) : new V(c.x * 0.75, 0.55, c.z * 0.75);
     lg.pose.dir.copy(rest.dir); lg.pose.pos.copy(start);
     lg.anim = { t: 0, dur: 0.85, from: start.clone(), to: rest.pos.clone(), dir: rest.dir.clone(), roll0: lg.pose.roll, roll1: lg.pose.roll + CF.rng.range(-2, 2) };
     this.addLogMesh(lg);
@@ -388,6 +393,7 @@
     if (el === this.el) return;
     if (this.ro) this.ro.disconnect();
     this.unbind(); this.el = el; el.appendChild(this.canvas); this.bindInput();
+    if (this.people) this.people.attach(el);
     var self = this; this.ro = new ResizeObserver(function () { self.resize(); }); this.ro.observe(el); this.resize();
   };
   Campfire.prototype.pause = function (on) { this.paused = !!on; this.clockLast = performance.now(); };
@@ -417,6 +423,7 @@
     // flames
     var cam = this.camera;
     this.updateCamera(dt);
+    if (this.people) this.people.update(dt, this.time, cam, draw);
     this.fire.orient(cam);
     this.fire.setSources(this.spots(dt));
     var soot = this.sootMix || 1, along = this.fire.windAlong(w.x, w.z), q = this.q;
@@ -555,6 +562,10 @@
     function onUp(e) {
       var wasTap = pts.has(e.pointerId) && moved < 8 && performance.now() - downAt < 400 && pts.size === 1;
       pts.delete(e.pointerId); if (pts.size < 2) lastPinch = 0;
+      if (wasTap && self.lit && self.people) {   // a tap on someone waves to them
+        var who = self.people.hit(e.clientX, e.clientY);
+        if (who >= 0) { if (self.opts.onEvent) self.opts.onEvent('wave_to', who); return; }
+      }
       if (wasTap && self.lit) {   // a tap on the flames stirs the fire
         var rect = self.canvas.getBoundingClientRect(), x = (e.clientX - rect.left) / rect.width * 2 - 1, y = -((e.clientY - rect.top) / rect.height * 2 - 1);
         var c = new V(0, 0.35, 0).project(self.camera);
@@ -604,6 +615,16 @@
     this.resize();
     if (this.opts.onEvent) this.opts.onEvent('quality', name);
   };
+  // the circle: who sits around this fire (JSON {seat, people: [{seat, name, look}]}, or '' for nobody) and what they do
+  Campfire.prototype.setCircle = function (json) {
+    if (!this.people) return 0;
+    var c = json ? JSON.parse(json) : null;
+    this.people.set(c ? c.seat : this.people.me, c ? c.people : []);
+    return this.people.count();
+  };
+  Campfire.prototype.circleAct = function (seat, kind, to, wood, wet) {
+    return this.people ? this.people.act(seat | 0, String(kind), to === null || to === undefined ? -1 : to | 0, wood || null, !!wet) : false;
+  };
   Campfire.prototype.setWind = function (level) { this.wind.level = CF.clamp(level | 0, 0, 2); };
   Campfire.prototype.setVolume = function (which, v) { if (which === 'master') this.audio.vol.masterUser = v; this.audio.setVolume(which, v); };
   Campfire.prototype.setAutoTend = function (on) { this.autoTend = !!on; };
@@ -619,7 +640,7 @@
       woods: this.world.def.woods.map(function (k) { return { key: k, label: CF.SPECIES[k].label, note: CF.SPECIES[k].note }; }),
       sleepLeft: this.sleepAt ? Math.max(0, Math.round((this.sleepAt - Date.now()) / 60000)) : 0, autoTend: this.autoTend,
       aurora: !!this.auroraOn, snowing: !!(this.motes && this.motes.on && this.motes.kind === 'snow'), sound: !!(this.audio.ctx && !this.muted),
-      exposure: Math.round(this.exposure * 100) / 100, simTime: Math.round(this.time)
+      exposure: Math.round(this.exposure * 100) / 100, simTime: Math.round(this.time), people: this.people ? this.people.count() : 0
     };
   };
   // tests and screenshots: run the fire for `sec` seconds of its life without drawing

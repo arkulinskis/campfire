@@ -33,7 +33,7 @@
 
   async function scan(hash, ready) {
     await page(hash, ready);
-    for (const theme of ['light', 'dark']) { window.UI.setTheme(theme); await sleep(900); /* let colour transitions and toasts settle */ await axeRun(hash + ' ' + theme); }
+    for (const theme of ['light', 'dark']) { window.UI.setTheme(theme); await sleep(1600); /* let colour transitions (night fire page -> About) and toasts settle */ await axeRun(hash + ' ' + theme); }
     window.UI.setTheme('auto');
   }
   async function axeRun(hash) {
