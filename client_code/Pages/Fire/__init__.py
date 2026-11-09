@@ -425,9 +425,9 @@ class Fire(FireTemplate):
     def _on_key(self, event):
         self._wake()
         target = getattr(event.target, "tagName", "") or ""
-        if str(target) in ("INPUT", "TEXTAREA", "SELECT") or _dialog_open() or event.ctrlKey or event.metaKey or event.altKey:
+        if str(target) in ("INPUT", "TEXTAREA", "SELECT") or _dialog_open() or getattr(event, "ctrlKey", False) or getattr(event, "metaKey", False) or getattr(event, "altKey", False):
             return
-        k = str(event.key).lower()
+        k = str(getattr(event, "key", None)).lower()
         if not self.hud.visible:
             return
         if k == "l" and self.wood_panel.items:
