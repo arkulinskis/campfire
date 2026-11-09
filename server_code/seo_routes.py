@@ -67,7 +67,7 @@ SEO = {
  ],
  "free": True,
  "site": "https://campfire.anvil.app",
- "updated": "2026-11-05",
+ "updated": "2026-11-08",
  "icon": "icon-512.png",
  "colors": {
   "bg": "#07080a",
@@ -86,6 +86,10 @@ VERIFY = {
  "/BingSiteAuth.xml": [
   "application/xml; charset=utf-8",
   "<?xml version=\"1.0\"?>\n<users>\n\t<user>96898D70AB82EDA558D871F6AA728E5B</user>\n</users>\n"
+ ],
+ "/googlebb4ee84a0f39aa63.html": [
+  "text/html; charset=utf-8",
+  "google-site-verification: googlebb4ee84a0f39aa63.html"
  ]
 }
 
