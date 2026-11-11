@@ -14,8 +14,11 @@ const testPw = fs.existsSync(pwFile) ? fs.readFileSync(pwFile, 'utf8').trim() : 
 const steps = JSON.parse(fs.readFileSync(stepsFile, 'utf8').split('$TEST_PASSWORD').join(testPw));
 fs.mkdirSync(outDir, { recursive: true });
 const port = process.env.CDP_PORT ? +process.env.CDP_PORT : 9300 + Math.floor(Math.random() * 500);
+// env ANGLE=d3d11 draws WebGL on this PC's real graphics card (fast, real frame rates); the default is the CPU
+// rasteriser SwiftShader (slow, about 2 frames a second, but the same on every machine).
+const angle = process.env.ANGLE || 'swiftshader';
 const chrome = process.env.CDP_PORT ? { kill() {} } : spawn('C:/Program Files/Google/Chrome/Application/chrome.exe', [
-  '--headless=new', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required', `--remote-debugging-port=${port}`, `--user-data-dir=${path.resolve(outDir, 'profile')}`,
+  '--headless=new', `--use-angle=${angle}`, ...(angle === 'swiftshader' ? ['--enable-unsafe-swiftshader'] : ['--enable-gpu']), ...(process.env.UNCAP ? ['--disable-gpu-vsync', '--disable-frame-rate-limit'] : []), '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required', `--remote-debugging-port=${port}`, `--user-data-dir=${path.resolve(outDir, 'profile')}`,
   `--window-size=${process.env.WINDOW || '1280,1000'}`, '--no-first-run', '--disable-extensions', 'about:blank'], { stdio: 'ignore' });
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const log = [];

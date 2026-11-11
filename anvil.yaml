@@ -88,9 +88,10 @@ db_schema:
     server: full
     title: Embers
 metadata:
-  description: "A campfire simulated live: fluid-simulated flames, crackles made by chance, logs that char and fall in. Three campsites, a sleep timer, no sign-up."
-  logo_img: "asset:icon-512.png"
-  title: "Campfire: a real fire, simulated live in your browser"
+  description: 'A campfire simulated live: fluid-simulated flames, crackles made by chance, logs that char and fall in. Three
+    campsites, a sleep timer, no sign-up.'
+  logo_img: asset:icon-512.png
+  title: 'Campfire: a real fire, simulated live in your browser'
 name: Campfire
 native_deps:
   head_html: |
@@ -151,13 +152,13 @@ native_deps:
     <script src="_/theme/app-kit.js?v=12bffa8103"></script>
     <!-- the fire engine (three.js r158 + Campfire's own simulation, world, sound) -->
     <script src="_/theme/three.min.js?v=3bfa54fdd7"></script>
-    <script src="_/theme/cf-core.js?v=3b18e9aa2b"></script>
-    <script src="_/theme/cf-fire.js?v=8791711a76"></script>
-    <script src="_/theme/cf-fx.js?v=df05e1b391"></script>
-    <script src="_/theme/cf-world.js?v=939d96be42"></script>
+    <script src="_/theme/cf-core.js?v=a3c301f17d"></script>
+    <script src="_/theme/cf-fire.js?v=844f86c323"></script>
+    <script src="_/theme/cf-fx.js?v=1ea99fba48"></script>
+    <script src="_/theme/cf-world.js?v=bd821f9f53"></script>
     <script src="_/theme/cf-people.js?v=7c7babda7f"></script>
-    <script src="_/theme/cf-audio.js?v=38e01f232e"></script>
-    <script src="_/theme/cf-engine.js?v=a4472d6d8d"></script>
+    <script src="_/theme/cf-audio.js?v=edbac105d2"></script>
+    <script src="_/theme/cf-engine.js?v=192e2e71bd"></script>
 package_name: Campfire
 runtime_options:
   client_version: '3'

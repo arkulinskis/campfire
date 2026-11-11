@@ -1,0 +1,48 @@
+<!doctype html>
+<!-- The fire engine alone, without Anvil: for looking at the picture and measuring it (tools/dev/README.md).
+     Served by `python tools/dev/look.py`. Query: place=forest|snow|desert  q=high|medium|low|lite|auto
+     a=<base URL of another copy of the cf-*.js files, e.g. an older version to compare with>  lit=0 (don't light)
+     uncap=1 (no frame cap, for benchmarks)  norender=1 (simulate without drawing) -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Campfire engine harness</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #stage { position: fixed; inset: 0; }
+  .cf-canvas { display: block; }
+  .cf-people { position: absolute; inset: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search), base = q.get('a') || '../../theme/assets/';
+  if (base === 'OLD') base = '/old/';   // look.py --old DIR serves that folder there
+  window.CF_TEST = {};
+  if (q.get('q') && q.get('q') !== 'auto') window.CF_TEST.quality = q.get('q');
+  if (q.get('norender')) window.CF_TEST.norender = true;
+  if (q.get('uncap')) window.CF_TEST.uncap = true;        // no frame cap: how fast can it go?
+  var files = ['three.min.js', 'cf-core.js', 'cf-fire.js', 'cf-fx.js', 'cf-world.js', 'cf-people.js', 'cf-audio.js', 'cf-engine.js'];
+  window.HARNESS_ERRORS = [];
+  window.addEventListener('error', function (e) { window.HARNESS_ERRORS.push(String(e.message) + ' @' + (e.filename || '').split('/').pop() + ':' + e.lineno); });
+  (function next(i) {
+    if (i >= files.length) {
+      try {
+        window.F = window.CF.create(document.getElementById('stage'), { place: q.get('place') || 'forest', quality: q.get('q') || 'auto' });
+        if (q.get('lit') !== '0' && window.F.ok) window.F.light();   // strike the match (no sound: nobody pressed anything)
+        window.HARNESS_READY = true;
+      } catch (e) { window.HARNESS_ERRORS.push(String(e && e.stack || e)); window.HARNESS_READY = true; }
+      return;
+    }
+    var s = document.createElement('script'); s.src = base + files[i] + '?t=' + Date.now();
+    s.onload = function () { next(i + 1); };
+    s.onerror = function () { window.HARNESS_ERRORS.push('could not load ' + files[i]); next(i + 1); };
+    document.head.appendChild(s);
+  })(0);
+})();
+</script>
+</body>
+</html>

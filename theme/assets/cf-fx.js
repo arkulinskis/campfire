@@ -3,8 +3,10 @@
      over their length (energy-conserving), coloured by their own cooling temperature (blackbody), bouncing and
      dying on the ground.
    - CF.Smoke: soft puffs that rise above the flames, lit from below by the fire and fading into the night.
-   - CF.Motes: fireflies (forest), falling snow (lakeshore), dust (desert).
-   - CF.Post: HDR pipeline. Opaque scene -> depth copy -> transparent fire -> heat haze -> physically based
+   - CF.Puffs: small puffs with a will of their own (your breath in the cold, steam from the coffee pot).
+   - CF.Mist: low sheets of fog that drift on the wind and catch the firelight.
+   - CF.Motes: fireflies and moths (forest), snow that comes and goes (lakeshore), dust in the firelight (desert).
+   - CF.Post: HDR pipeline. Opaque scene (multisampled where the device can) -> depth copy -> transparent fire -> heat haze -> physically based
      bloom (13-tap downsample / tent upsample, Jimenez 2014) -> exposure with eye adaptation -> AgX tone curve
      -> vignette + film grain (also dithers the dark gradients of a night scene). */
 (function () {
@@ -182,40 +184,151 @@
   };
   CF.Smoke = Smoke;
 
-  // ------------------------------------------------------------------ motes: fireflies, snow, dust
+  // ------------------------------------------------------------------ small puffs: your breath in the cold, steam from the pot
+  // The same soft sprites as the smoke, but each puff is told where it starts and how it moves.
+  function Puffs(max) {
+    Smoke.call(this, max);
+    this.mesh.renderOrder = 6;
+  }
+  Puffs.prototype.emit = function (x, y, z, vx, vy, vz, size, grow, life, dens, lit) {
+    if (this.items.length >= this.max) return;
+    this.items.push({ x: x, y: y, z: z, vx: vx, vy: vy, vz: vz, size: size, grow: grow, rot: CF.rng.range(0, 6.28), spin: CF.rng.gauss() * 0.3, age: 0, life: life, dens: dens, lit: lit });
+  };
+  Puffs.prototype.update = function (dt, wind) {
+    for (var i = this.items.length - 1; i >= 0; i--) {
+      var s = this.items[i];
+      s.age += dt;
+      if (s.age > s.life) { this.items.splice(i, 1); continue; }
+      var drag = Math.exp(-1.6 * dt);
+      s.vx = s.vx * drag + wind.x * 0.25 * dt; s.vz = s.vz * drag + wind.z * 0.25 * dt; s.vy = s.vy * drag + 0.12 * dt;
+      s.x += s.vx * dt; s.y += s.vy * dt; s.z += s.vz * dt;
+      s.size += s.grow * dt; s.rot += s.spin * dt;
+    }
+  };
+  Puffs.prototype.upload = function () {
+    var P = this.aP.array, S = this.aS.array, n = this.items.length;
+    for (var i = 0; i < n; i++) {
+      var s = this.items[i], t = s.age / s.life;
+      P[i * 4] = s.x; P[i * 4 + 1] = s.y; P[i * 4 + 2] = s.z;
+      S[i * 4] = s.size; S[i * 4 + 1] = s.rot; S[i * 4 + 2] = CF.smooth(0, 0.15, t) * (1 - CF.smooth(0.3, 1, t)) * s.dens; S[i * 4 + 3] = s.lit;
+    }
+    this.geo.instanceCount = n;
+    this.aP.needsUpdate = this.aS.needsUpdate = true;
+  };
+  CF.Puffs = Puffs;
+
+  // ------------------------------------------------------------------ mist: low sheets of fog that drift and catch the firelight
+  var MIST_VS = [
+    'in vec2 corner; in vec4 iP; in vec4 iS;',
+    'out vec2 vUv; out float vA; out float vLit; out float vViewZ;',
+    'void main(){ vec4 mv = viewMatrix * vec4(iP.xyz, 1.); float c = cos(iS.x), s = sin(iS.x);',
+    '  vec2 q = corner * vec2(iP.w, iP.w * .34); mv.xy += q;',
+    '  vViewZ = -mv.z; gl_Position = projectionMatrix * mv;',
+    '  vec2 r = corner * .5; vUv = vec2(c * r.x - s * r.y, s * r.x + c * r.y) + .5; vA = iS.y; vLit = iS.z; }'
+  ].join('\n');
+  var MIST_FS = [
+    'precision highp float; in vec2 vUv; in float vA; in float vLit; in float vViewZ; out vec4 outColor;',
+    'uniform sampler2D tPuff, tDepth; uniform vec3 uLit, uAmb; uniform vec2 uRes; uniform float uNear, uFar;',
+    'float lin(float d){ float z = d * 2. - 1.; return 2. * uNear * uFar / (uFar + uNear - z * (uFar - uNear)); }',
+    'void main(){ float a = texture(tPuff, clamp(vUv, 0., 1.)).a * vA;',
+    '  float sceneZ = lin(texture(tDepth, gl_FragCoord.xy / uRes).r);',
+    '  a *= clamp((sceneZ - vViewZ) / 1.2, 0., 1.) * smoothstep(1.2, 3.5, vViewZ);',   // no hard line where a sheet meets the ground, none when you walk through one
+    '  vec3 c = uAmb + uLit * vLit; outColor = vec4(c * a, a); }'
+  ].join('\n');
+  // cfg: a place's `mist` ({n, r0, r1 | lake, y0, y1, size0, size1, color, dens, fire}); scale = how many of them (quality)
+  function Mist(cfg, scale) {
+    var n = Math.max(1, Math.round(cfg.n * scale)), R = CF.rng;
+    this.cfg = cfg; this.n = n; this.items = [];
+    for (var i = 0; i < n; i++) {
+      var it = { size: R.range(cfg.size0, cfg.size1), y: R.range(cfg.y0, cfg.y1), rot: R.range(0, 6.28), ph: R.range(0, 6.28), k: R.range(0.6, 1.2), drift: R.range(0.03, 0.09) };
+      if (cfg.lake) { it.x = R.range(-48, 48); it.z = R.range(-42, -10); } else { var a = R.range(0, 6.28), r = R.range(cfg.r0, cfg.r1); it.x = Math.cos(a) * r; it.z = Math.sin(a) * r; }
+      this.items.push(it);
+    }
+    var g = new THREE.InstancedBufferGeometry();
+    g.setAttribute('corner', new THREE.Float32BufferAttribute([-1, -1, 1, -1, 1, 1, -1, 1], 2));
+    g.setIndex([0, 1, 2, 0, 2, 3]);
+    this.aP = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4); this.aP.setUsage(THREE.DynamicDrawUsage);
+    this.aS = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4); this.aS.setUsage(THREE.DynamicDrawUsage);
+    g.setAttribute('iP', this.aP); g.setAttribute('iS', this.aS); g.instanceCount = n;
+    this.mat = new THREE.ShaderMaterial({
+      glslVersion: THREE.GLSL3, vertexShader: MIST_VS, fragmentShader: MIST_FS,
+      uniforms: { tPuff: { value: CF.puffTexture(9) }, tDepth: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uNear: { value: 0.05 }, uFar: { value: 900 },
+                  uLit: { value: new THREE.Color(0, 0, 0) }, uAmb: { value: new THREE.Color().fromArray(cfg.color) } },
+      transparent: true, depthWrite: false, depthTest: true,
+      blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor
+    });
+    this.mesh = new THREE.Mesh(g, this.mat); this.mesh.frustumCulled = false; this.mesh.renderOrder = 3;
+    this.geo = g;
+  }
+  // wind = {x, z}; fire = the fire's light (the scene lamp's intensity / 4 pi: fog scatters every way); thick = 0..1.3
+  Mist.prototype.update = function (dt, time, wind, fire, thick) {
+    var P = this.aP.array, S = this.aS.array, c = this.cfg, R = CF.rng;
+    for (var i = 0; i < this.n; i++) {
+      var s = this.items[i];
+      s.x += (wind.x * 0.22 + Math.cos(s.ph) * s.drift) * dt; s.z += (wind.z * 0.22 + Math.sin(s.ph) * s.drift) * dt;
+      if (c.lake) {
+        if (s.x > 50) s.x = -50; else if (s.x < -50) s.x = 50;
+        if (s.z > -9) s.z = -42; else if (s.z < -43) s.z = -10;
+      } else {
+        var r = Math.hypot(s.x, s.z);
+        if (r > c.r1 || r < c.r0 * 0.8) {       // drifted off, or in over the fire: it comes back in on the wind
+          var a = Math.atan2(-wind.z, -wind.x) + R.range(-1.4, 1.4), rr = c.r1 * R.range(0.75, 0.97);
+          if (r < c.r0 * 0.8) { a = Math.atan2(s.z, s.x) + Math.PI + R.range(-0.5, 0.5); rr = c.r1 * 0.8; }
+          s.x = Math.cos(a) * rr; s.z = Math.sin(a) * rr; s.born = time;
+        }
+      }
+      var d2 = s.x * s.x + s.z * s.z, fadeIn = s.born === undefined ? 1 : CF.smooth(0, 12, time - s.born);
+      var edge = c.lake ? 1 : CF.smooth(c.r0 * 0.8, c.r0 * 1.25, Math.sqrt(d2)) * (1 - CF.smooth(c.r1 * 0.85, c.r1, Math.sqrt(d2)));
+      P[i * 4] = s.x; P[i * 4 + 1] = s.y; P[i * 4 + 2] = s.z; P[i * 4 + 3] = s.size;
+      S[i * 4] = s.rot; S[i * 4 + 1] = c.dens * s.k * thick * fadeIn * edge * (0.7 + 0.3 * Math.sin(time * 0.07 + s.ph));
+      S[i * 4 + 2] = fire * c.fire / Math.pow(Math.max(d2, 1), 0.8);   // lit like everything else: 1 / distance^1.6
+    }
+    this.aP.needsUpdate = this.aS.needsUpdate = true;
+  };
+  Mist.prototype.prepare = function (depthTex, w, h, camera, r, g, b) {
+    var u = this.mat.uniforms; u.tDepth.value = depthTex; u.uRes.value.set(w, h); u.uNear.value = camera.near; u.uFar.value = camera.far; u.uLit.value.setRGB(r, g, b);
+  };
+  Mist.prototype.dispose = function () { this.geo.dispose(); this.mat.dispose(); };
+  CF.Mist = Mist;
+
+  // ------------------------------------------------------------------ motes: fireflies, snow, dust, moths
   var MOTE_VS = [
-    'in vec4 iM; uniform float uScale, uTime; uniform int uKind; out float vB; out float vKind;',
+    'in vec4 iM; uniform float uScale, uTime; uniform int uKind; out float vB;',
     'void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.); gl_Position = projectionMatrix * mv;',
-    '  float d = length(position.xz);',
     '  if (uKind == 0) { float ph = fract(uTime * iM.y + iM.x); vB = smoothstep(0., .08, ph) * (1. - smoothstep(.12, .35, ph)); gl_PointSize = max(2.2, uScale * .03 / -mv.z); }',
+    '  else if (uKind == 2) { vB = iM.z; gl_PointSize = clamp(uScale * .017 * iM.w / -mv.z, 1.5, 9.); }',
     '  else { vB = iM.z; gl_PointSize = clamp(uScale * .011 * iM.w / -mv.z, 1., 6.); }',
     '}'
   ].join('\n');
   var MOTE_FS = [
-    'precision highp float; in float vB; out vec4 outColor; uniform vec3 uColor; uniform int uKind; uniform vec3 uFire; uniform float uFireK;',
+    'precision highp float; precision highp int; in float vB; out vec4 outColor; uniform vec3 uColor; uniform int uKind; uniform vec3 uFire; uniform float uFireK;',
     'void main(){ vec2 q = gl_PointCoord * 2. - 1.; float r = dot(q, q); if (r > 1.) discard;',
     '  if (uKind == 0) { float f = exp(-r * 4.); outColor = vec4(uColor * vB * f, 1.); }',
+    '  else if (uKind == 2) { float f = smoothstep(1., .3, r) * min(1., vB * 6.); outColor = vec4(uColor * uFire * vB * f, f); }',   // a moth: a pale thing that only shows in the firelight
     '  else { float f = (1. - r) * (1. - r); vec3 c = uColor + uFire * vB * uFireK; outColor = vec4(c * f * .8, f * .8); } }'
   ].join('\n');
+  // kind: 'fireflies' | 'snow' | 'dust' | 'moths'; area = how far out they live (m)
   function Motes(kind, count, area) {
-    this.kind = kind; this.count = count; this.area = area;
+    this.kind = kind; this.count = count; this.area = area; this.top = kind === 'dust' ? 2.8 : 9;
     var R = CF.rng, pos = new Float32Array(count * 3), m = new Float32Array(count * 4);
-    this.vel = new Float32Array(count * 3); this.base = new Float32Array(count * 3);
+    this.vel = new Float32Array(count * 3); this.base = new Float32Array(count * 3); this.moth = [];
     for (var i = 0; i < count; i++) {
       var a = R.range(0, 6.283), d = kind === 'fireflies' ? R.range(6, area) : R.range(0.5, area);
       this.base[i * 3] = pos[i * 3] = Math.cos(a) * d;
-      this.base[i * 3 + 1] = pos[i * 3 + 1] = kind === 'fireflies' ? R.range(0.3, 3.5) : R.range(0, 9);
+      this.base[i * 3 + 1] = pos[i * 3 + 1] = kind === 'fireflies' ? R.range(0.3, 3.5) : R.range(0, this.top);
       this.base[i * 3 + 2] = pos[i * 3 + 2] = Math.sin(a) * d;
       m[i * 4] = R.next(); m[i * 4 + 1] = R.range(0.12, 0.28); m[i * 4 + 2] = 0; m[i * 4 + 3] = R.range(0.6, 1.3);
+      // a moth circles the light for a while, wanders off into the dark, and comes back
+      this.moth.push({ a: a, w: R.range(1.1, 2.4) * (R.chance(0.5) ? 1 : -1), ph: R.range(0, 6.28), here: 0, want: 0, until: R.range(5, 70) });
     }
     this.geo = new THREE.BufferGeometry();
     this.geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     this.geo.setAttribute('iM', new THREE.BufferAttribute(m, 4));
     this.mat = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3, vertexShader: MOTE_VS, fragmentShader: MOTE_FS,
-      uniforms: { uScale: { value: 600 }, uTime: { value: 0 }, uKind: { value: kind === 'fireflies' ? 0 : 1 },
-                  uColor: { value: kind === 'fireflies' ? new THREE.Color(0.55, 0.9, 0.15) : kind === 'snow' ? new THREE.Color(0.022, 0.026, 0.034) : new THREE.Color(0.02, 0.016, 0.012) },
-                  uFire: { value: new THREE.Color(1.0, 0.45, 0.15) }, uFireK: { value: 0.3 } },
+      uniforms: { uScale: { value: 600 }, uTime: { value: 0 }, uKind: { value: kind === 'fireflies' ? 0 : kind === 'moths' ? 2 : 1 },
+                  uColor: { value: kind === 'fireflies' ? new THREE.Color(0.55, 0.9, 0.15) : kind === 'snow' ? new THREE.Color(0.022, 0.026, 0.034) : kind === 'moths' ? new THREE.Color(0.7, 0.64, 0.52) : new THREE.Color(0.012, 0.01, 0.008) },
+                  uFire: { value: new THREE.Color(1.0, 0.45, 0.15) }, uFireK: { value: kind === 'dust' ? 0.5 : 0.3 } },
       transparent: true, depthWrite: false,
       blending: kind === 'fireflies' ? THREE.AdditiveBlending : THREE.CustomBlending,
       blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor
@@ -223,31 +336,48 @@
     this.points = new THREE.Points(this.geo, this.mat); this.points.frustumCulled = false; this.points.renderOrder = 4;
     this.on = true;
   }
+  // how many of them are in the air (0..1): snow comes and goes
+  Motes.prototype.setAmount = function (a) { this.geo.setDrawRange(0, Math.round(this.count * CF.clamp(a, 0, 1))); };
   Motes.prototype.update = function (dt, time, wind, fireLight) {
-    var p = this.geo.attributes.position.array, m = this.geo.attributes.iM.array, R = CF.rng, n = this.count;
+    var p = this.geo.attributes.position.array, m = this.geo.attributes.iM.array, R = CF.rng, n = this.count, i, o;
     this.mat.uniforms.uTime.value = time;
     if (this.kind === 'fireflies') {
-      for (var i = 0; i < n; i++) {
-        var o = i * 3, t = time * 0.15 + i * 3.1;
+      for (i = 0; i < n; i++) {
+        o = i * 3; var t = time * 0.15 + i * 3.1;
         p[o] = this.base[o] + Math.sin(t * 1.3) * 0.8 + CF.noise3(t * 0.3, i, 0) * 1.2;
         p[o + 1] = this.base[o + 1] + Math.sin(t * 0.9 + i) * 0.3;
         p[o + 2] = this.base[o + 2] + Math.cos(t * 1.1) * 0.8;
       }
-    } else {
-      var fall = this.kind === 'snow' ? 0.55 : 0.05;
+    } else if (this.kind === 'moths') {
+      var lure = Math.min(1, fireLight * 2.5);
       for (i = 0; i < n; i++) {
+        o = i * 3; var s = this.moth[i];
+        if (time > s.until) { s.want = s.want ? 0 : 1; s.until = time + (s.want ? R.range(25, 80) : R.range(30, 140)); }
+        s.here = CF.damp(s.here, s.want * lure, 0.35, dt);
+        s.a += (s.w + CF.noise3(time * 0.7, i * 7.1, 2) * 2.2) * dt;
+        var rad = 0.7 + 0.5 * (0.5 + 0.5 * Math.sin(time * 0.37 + s.ph)) + (1 - s.here) * 7;
+        var y = 0.85 + 0.4 * Math.sin(time * 0.9 + s.ph) + CF.noise3(time * 2.3, i * 3.3, 5) * 0.2 + (1 - s.here) * 1.5;
+        p[o] = Math.cos(s.a) * rad + CF.noise3(time * 3.1, i, 9) * 0.1; p[o + 1] = y; p[o + 2] = Math.sin(s.a) * rad + CF.noise3(i, time * 3.1, 4) * 0.1;
+        var d = Math.max(0.35, Math.hypot(rad, y - 0.4));
+        m[i * 4 + 2] = s.here * 6 * fireLight / Math.pow(d, 1.6) * (0.5 + 0.5 * Math.abs(Math.sin(time * 33 + i * 2.1)));
+      }
+      this.geo.attributes.iM.needsUpdate = true;
+    } else {
+      var fall = this.kind === 'snow' ? 0.55 : 0.04, drawn = Math.min(n, this.geo.drawRange.count === Infinity ? n : this.geo.drawRange.count);
+      for (i = 0; i < drawn; i++) {
         o = i * 3;
         p[o] += (wind.x * 0.6 + CF.noise3(p[o + 1] * 0.5, i * 0.1, time * 0.2) * 0.35) * dt;
         p[o + 2] += (wind.z * 0.6 + CF.noise3(i * 0.1, p[o] * 0.5, time * 0.2) * 0.35) * dt;
         p[o + 1] -= fall * m[i * 4 + 3] * dt;
         var d2 = p[o] * p[o] + p[o + 2] * p[o + 2];
         if (this.kind === 'snow' && d2 < 1.2 && p[o + 1] < 2.2) p[o + 1] -= dt * 1.5; // melt over the fire
-        if (p[o + 1] < 0 || d2 > this.area * this.area) {
-          var a = R.range(0, 6.283), d = Math.sqrt(R.next()) * this.area;
-          p[o] = Math.cos(a) * d; p[o + 2] = Math.sin(a) * d; p[o + 1] = R.range(6, 9);
+        if (this.kind === 'dust' && d2 < 0.5) p[o + 1] += dt * (0.5 + fireLight);    // dust is lifted by the fire's own draught
+        if (p[o + 1] < 0 || p[o + 1] > this.top + 1 || d2 > this.area * this.area) {
+          var a = R.range(0, 6.283), dd = Math.sqrt(R.next()) * this.area;
+          p[o] = Math.cos(a) * dd; p[o + 2] = Math.sin(a) * dd; p[o + 1] = this.kind === 'snow' ? R.range(6, 9) : R.range(0.05, this.top);
         }
         var dist = Math.sqrt(d2 + Math.pow(p[o + 1] - 0.5, 2));
-        m[i * 4 + 2] = fireLight / (1 + dist * dist * 0.6);
+        m[i * 4 + 2] = fireLight / (1 + dist * dist * (this.kind === 'dust' ? 3 : 0.6));   // dust only shows close to the flames
       }
       this.geo.attributes.iM.needsUpdate = true;
     }
@@ -313,9 +443,9 @@
     '  outColor = vec4(t, 1.); }'
   ].join('\n');
 
-  function hdrRT(w, h, depthTex) {
+  function hdrRT(w, h, depthTex, samples) {
     var t = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: true,
-      minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+      minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, samples: samples || 0 });
     t.texture.generateMipmaps = false;
     if (depthTex) { t.depthTexture = new THREE.DepthTexture(w, h, THREE.UnsignedIntType); t.depthTexture.format = THREE.DepthFormat; }
     return t;
@@ -325,8 +455,12 @@
     return m;
   }
 
-  function Post(renderer) {
+  // samples: 0, 2 or 4: smooth edges on everything solid (the device's own limit for this format is respected)
+  function Post(renderer, samples) {
     this.r = renderer;
+    var gl = renderer.getContext(), can = 0;
+    try { var list = gl.getInternalformatParameter(gl.RENDERBUFFER, gl.RGBA16F, gl.SAMPLES); for (var k = 0; list && k < list.length; k++) can = Math.max(can, list[k]); } catch (e) {}
+    this.maxSamples = can; this.samples = Math.min(samples || 0, can);
     this.scene = new THREE.Scene(); this.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     this.quad = new THREE.Mesh(CF.fullscreenTriangle()); this.quad.frustumCulled = false; this.scene.add(this.quad);
     this.mDown = raw(DOWN_FS, { tSrc: { value: null }, uTexel: { value: new THREE.Vector2() }, uFirst: { value: 0 } });
@@ -341,11 +475,16 @@
     this.levels = [];
     this.w = this.h = 0;
   }
+  Post.prototype.setSamples = function (n) {
+    n = Math.min(n || 0, this.maxSamples);
+    if (n === this.samples) return;
+    this.samples = n; var w = this.w, h = this.h; this.w = 0; if (w) this.setSize(w, h);
+  };
   Post.prototype.setSize = function (w, h) {
     if (w === this.w && h === this.h) return;
     this.w = w; this.h = h;
-    if (this.opaque) { this.opaque.dispose(); this.main.dispose(); this.levels.forEach(function (l) { l.dispose(); }); }
-    this.opaque = hdrRT(w, h, true);
+    if (this.opaque) { this.opaque.depthTexture.dispose(); this.opaque.dispose(); this.main.dispose(); this.levels.forEach(function (l) { l.dispose(); }); }
+    this.opaque = hdrRT(w, h, true, this.samples);
     this.main = hdrRT(w, h, false);
     this.levels = [];
     var lw = w, lh = h;

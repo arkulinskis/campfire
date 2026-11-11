@@ -14,11 +14,11 @@ from anvil.js import window
 
 PLACES = [
     {"key": "forest", "name": "Boreal midnight",
-     "line": "Spruce and pine, a canvas tent, crickets and an owl. No moon: the Milky Way is yours."},
+     "line": "Spruce and pine, a canvas tent, a brook, crickets and owls, mist in the trees. No moon: the Milky Way is yours."},
     {"key": "snow", "name": "Lakeshore, first snow",
-     "line": "A frozen lake under a full moon, birches, the ice singing, wolves far off. Some nights, the northern lights."},
+     "line": "A frozen lake under a full moon, birches, the ice singing, wolves far off. Snow comes and goes. Some nights, the northern lights."},
     {"key": "desert", "name": "Desert canyon",
-     "line": "Sandstone walls, a dead juniper, coyotes echoing off the rock. Still air and the darkest sky."},
+     "line": "Sandstone walls, a dead juniper, coyotes echoing off the rock, lightning far beyond the rim. Still air and the darkest sky."},
 ]
 PLACE_NAMES = {p["key"]: p["name"] for p in PLACES}
 

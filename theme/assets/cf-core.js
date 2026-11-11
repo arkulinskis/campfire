@@ -95,14 +95,23 @@
     'float cfNoise(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3. - 2. * f);',
     '  return mix(mix(mix(cfHash(i), cfHash(i + vec3(1,0,0)), f.x), mix(cfHash(i + vec3(0,1,0)), cfHash(i + vec3(1,1,0)), f.x), f.y),',
     '             mix(mix(cfHash(i + vec3(0,0,1)), cfHash(i + vec3(1,0,1)), f.x), mix(cfHash(i + vec3(0,1,1)), cfHash(i + vec3(1,1,1)), f.x), f.y), f.z); }',
-    'float cfFbm(vec3 p){ float a = .5, s = 0.; for (int i = 0; i < 5; i++) { s += a * cfNoise(p); p = p * 2.03 + vec3(1.7, 9.2, 3.1); a *= .5; } return s; }',
+    '#ifndef CF_OCT', '#define CF_OCT 5', '#endif',
+    'float cfFbm(vec3 p){ float a = .5, s = 0.; for (int i = 0; i < CF_OCT; i++) { s += a * cfNoise(p); p = p * 2.03 + vec3(1.7, 9.2, 3.1); a *= .5; } return s; }',
     'float cfFbm3(vec3 p){ float a = .5, s = 0.; for (int i = 0; i < 3; i++) { s += a * cfNoise(p); p = p * 2.07 + vec3(4.1, 1.3, 7.7); a *= .5; } return s; }',
     // cellular: x = distance to nearest cell point, y = second nearest (y - x small = a crack)
+    '#ifdef CF_OCT',   // the lightest tier: cell points keep to the middle of their cells, so only the 8 nearest cells can matter
+    'vec2 cfCells(vec3 p){ vec3 i = floor(p - .5), f = p - i; float d1 = 8., d2 = 8.;',
+    '  for (int z = 0; z <= 1; z++) for (int y = 0; y <= 1; y++) for (int x = 0; x <= 1; x++) {',
+    '    vec3 g = vec3(float(x), float(y), float(z)); vec3 o = .25 + .5 * cfHash3(i + g); vec3 r = g + o - f; float d = dot(r, r);',
+    '    if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d; }',
+    '  return vec2(sqrt(d1), sqrt(d2)); }',
+    '#else',
     'vec2 cfCells(vec3 p){ vec3 i = floor(p), f = fract(p); float d1 = 8., d2 = 8.;',
     '  for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {',
     '    vec3 g = vec3(float(x), float(y), float(z)); vec3 o = cfHash3(i + g); vec3 r = g + o - f; float d = dot(r, r);',
     '    if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d; }',
     '  return vec2(sqrt(d1), sqrt(d2)); }',
+    '#endif',
     // Mikkelsen bump mapping from any height function (no textures needed)
     'vec3 cfBump(vec3 pos, vec3 n, float h, float k){ vec3 dpx = dFdx(pos), dpy = dFdy(pos); float dhx = dFdx(h) * k, dhy = dFdy(h) * k;',
     '  vec3 r1 = cross(dpy, n), r2 = cross(n, dpx); float det = dot(dpx, r1); vec3 g = sign(det) * (dhx * r1 + dhy * r2);',
@@ -223,6 +232,36 @@
     cx.putImageData(img, 0, 0);
     var t = new THREE.CanvasTexture(cv); t.needsUpdate = true;
     return t;
+  };
+
+  // One small tiling texture replaces the noise the flame shaders used to compute per pixel (dozens of hashes each):
+  // rg = a divergence-free vector field (the curl of value noise, +-1.5 packed into 0..1), b = three octaves of
+  // value noise (contrast stretched around 0.5), a = one octave. 16 lattice cells across the tile; it repeats.
+  CF.noiseTexture = function () {
+    if (CF._noiseTex) return CF._noiseTex;
+    var N = 256, C = 16, data = new Uint8Array(N * N * 4), psi = new Float32Array(N * N), i, x, y;
+    function lattice(cells, seed) { var r = CF.fixedRng(seed), a = new Float32Array(cells * cells); for (var k = 0; k < a.length; k++) a[k] = r.next(); return a; }
+    function value(lat, cells, gx, gy) {
+      var X = Math.floor(gx), Y = Math.floor(gy), fx = gx - X, fy = gy - Y, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
+      var x0 = ((X % cells) + cells) % cells, x1 = (x0 + 1) % cells, y0 = ((Y % cells) + cells) % cells, y1 = (y0 + 1) % cells;
+      return CF.lerp(CF.lerp(lat[y0 * cells + x0], lat[y0 * cells + x1], u), CF.lerp(lat[y1 * cells + x0], lat[y1 * cells + x1], u), v);
+    }
+    var pL = lattice(C, 71), aL = lattice(C, 72), f1 = lattice(C, 73), f2 = lattice(C * 2, 74), f3 = lattice(C * 4, 75);
+    for (y = 0; y < N; y++) for (x = 0; x < N; x++) psi[y * N + x] = value(pL, C, (x + 0.5) / N * C, (y + 0.5) / N * C);
+    var dq = 2 * C / N;   // lattice units between the two texels of a central difference
+    for (y = 0; y < N; y++) for (x = 0; x < N; x++) {
+      i = (y * N + x) * 4;
+      var gx = (x + 0.5) / N * C, gy = (y + 0.5) / N * C;
+      var ddx = (psi[y * N + (x + 1) % N] - psi[y * N + (x + N - 1) % N]) / dq, ddy = (psi[((y + 1) % N) * N + x] - psi[((y + N - 1) % N) * N + x]) / dq;
+      var fbm = value(f1, C, gx, gy) * 0.5 + value(f2, C * 2, gx * 2, gy * 2) * 0.3 + value(f3, C * 4, gx * 4, gy * 4) * 0.2;
+      data[i] = Math.round(255 * CF.clamp(0.5 + 0.5 * ddy / 1.5, 0, 1));
+      data[i + 1] = Math.round(255 * CF.clamp(0.5 - 0.5 * ddx / 1.5, 0, 1));
+      data[i + 2] = Math.round(255 * CF.clamp(0.5 + (fbm - 0.5) * 1.7, 0, 1));
+      data[i + 3] = Math.round(255 * value(aL, C, gx, gy));
+    }
+    var t = new THREE.DataTexture(data, N, N, THREE.RGBAFormat, THREE.UnsignedByteType);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true;
+    return (CF._noiseTex = t);
   };
 
   CF.fullscreenTriangle = function () {

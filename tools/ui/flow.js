@@ -40,6 +40,15 @@
     ok(st().kindling >= 6 && st().logs >= 3, 'engine: a teepee of kindling and ' + st().logs + ' logs waits');
     ok(!vis($('.cf-hud')), 'the controls stay hidden until the match');
 
+    // ---- the engine underneath: a tier, a multigrid flame simulation, a sky that moves
+    const q0 = st();
+    ok(q0.quality === 'low' && q0.simHz === 30 && q0.smooth === 0 && q0.scale > 0, 'engine: the test tier (low, simulation at 30 a second, picture x' + q0.scale + ')');
+    ok(F().fire.slices.length === 2 && F().fire.slices[0].sim.levels.length >= 4 && F().fire.passesPerStep() < 80, 'flames: 2 slices, pressure solved on ' + F().fire.slices[0].sim.levels.length + ' grids, ' + F().fire.passesPerStep() + ' GPU passes a step');
+    ok(F().sky && F().sky.cubes.length === 3 && F().mist && F().moths, 'forest night: a sky painted ahead in cube maps, mist and moths');
+    const G = window.CF.guessTier;
+    ok(G('Google SwiftShader', false, 8, 8, 1400) === 'lite' && G('ANGLE (Qualcomm, Adreno (TM) 610)', true, 4, 8, 390) === 'low' && G('Mali-T830', true, 2, 4, 390) === 'lite' &&
+       G('Apple GPU', true, 0, 6, 390) === 'medium' && G('ANGLE (NVIDIA, NVIDIA GeForce RTX 4070)', false, 16, 16, 1400) === 'high', 'first guess: software and old chips start on the lightest tiers, strong ones on the finest');
+
     // ---- strike the match
     await click('.anvil-role-cf-match button');
     await until(() => st().lit && vis($('.cf-hud')) && !vis($('.cf-intro')), 'lit + controls');
@@ -143,6 +152,13 @@
     await until(() => /full/i.test(text($('.anvil-notification, [data-notify="container"]'))), 'the "fire is full" note');
     ok(st().logs <= 9, 'a full fire says so instead of piling on more');
 
+    // ---- the night goes on: wind reaches the trees, the sky turns, weather has a state
+    const U = window.CF.U.uWind.value, rot0 = F().sky.mat.uniforms.uRot.value.elements.slice();
+    F().warp(90);
+    await until(() => F().frame > 3 && Math.abs(F().sky.mat.uniforms.uRot.value.elements[1] - rot0[1]) > 1e-4, 'the sky to turn');
+    ok(Math.abs(U.z - F().time) < 1 && isFinite(U.x) && isFinite(U.y), 'a minute and a half on: the stars have turned and the wind (' + U.x.toFixed(2) + ', ' + U.y.toFixed(2) + ') reaches the trees');
+    ok(st().cloud >= 0 && st().cloud < 1 && F().wx.mist.x > 0, 'weather: cloud ' + st().cloud + ', mist ' + F().wx.mist.x.toFixed(2));
+
     // ---- another place
     await click('.cf-top .anvil-role-cf-glass button', 'Boreal midnight');
     await until(() => $$('.cf-places-dialog .cf-place').length === 3, 'the place picker');
@@ -153,6 +169,7 @@
       'Go here: the fire moves to the lakeshore (colours + remembered)');
     await until(() => $$('.cf-tray .anvil-role-cf-wood button').map(text).includes('Spruce'), 'snow woods');
     ok(st().logs > 0 && st().lit, 'the fire comes along, still burning (' + st().logs + ' logs)');
+    ok(F().motes.kind === 'snow' && F().mist && !F().moths && F().world.def.breath && F().sky.moonDir.y > 0, 'the lakeshore has its own night: snow, mist on the ice, your breath, a moon');
     ok(F().people.count() === 0 && !vis(btn('.cf-tray button', 'Wave')), 'a new place, a new circle: the forest visitor is not here');
     const sn = await C.pulse();
     ok(sn.circle && sn.circle.id !== me.circle.id && /^c-snow-/.test(sn.circle.id), 'the next heartbeat seats me in a lakeshore circle');
@@ -167,6 +184,7 @@
     ok(F().sleepAt > Date.now() + 19 * 60000, 'settings: the sleep timer is set for 20 minutes');
     await click('.cf-settings .ui-seg button', 'Off');
     ok(!F().sleepAt, 'settings: sleep timer off again');
+    ok($$('.cf-settings .ui-seg button').map(text).includes('Lightest') && /picture/.test(text($('.cf-settings .anvil-role-cf-set-hint'))), 'settings: five pictures to choose from (Auto ... Lightest), and a note says which is drawn');
     const tick = $('.cf-settings input[type=checkbox]'); tick.click();
     await until(() => F().autoTend === true, 'auto tend');
     ok(true, 'settings: "Keep the fire going" turns on auto-tending');
@@ -175,6 +193,21 @@
     ok(JSON.parse(localStorage.getItem('campfire.settings')).fire === 0.4, 'settings: the fire volume slider works and is remembered');
     await click('.cf-settings .anvil-role-btn-primary button', 'Back to the fire');
     await until(() => !$('.cf-settings'), 'settings closed');
+
+    // ---- the sleep timer runs out: drawing stops, a touch brings the fire back
+    F().sleepAt = Date.now() - 1;
+    await until(() => st().asleep === true, 'asleep');
+    await until(() => /resting/.test(text($('.anvil-role-cf-status-text'))), 'the resting status line');
+    const fr = F().frame; await sleep(900);
+    ok(F().frame === fr, 'sleep timer over: nothing is drawn any more, and the status says how to wake it');
+    window.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await until(() => st().asleep === false && F().frame > fr, 'awake');
+    ok(F().sleepFade === 1, 'a touch wakes the fire');
+    // the governor gives up resolution first when frames are slow (here asked directly)
+    const g0 = Object.assign({}, F().gov); F().autoQ = true;
+    const first = F().stepDown(), sc = F().gov.scale;
+    Object.assign(F().gov, g0, { first: null, before: 0 }); F().autoQ = false; F().resize();
+    ok((first === 'scale' && sc < 1) || first === 'simulation' || first === 'smoothing', 'governor: its first step down is "' + first + '"');
 
     // ---- sound off / on
     await click('.cf-top .anvil-role-cf-glass button', 'Sound on');
@@ -192,7 +225,7 @@
 
     // ---- How it works, while the fire keeps burning
     await page('#about', () => $('#ab-title'), 'about');
-    ok(text($('#ab-title')) === 'A fire you can sit by.' && $$('.ab-card').length === 6 && $$('.ab-faq details').length >= 6, 'about: the story, six explanations and the questions');
+    ok(text($('#ab-title')) === 'A fire you can sit by.' && $$('.ab-card').length === 8 && $$('.ab-faq details').length >= 6, 'about: the story, eight explanations and the questions');
     ok(F().paused === true && st().lit, 'about: the fire is paused on screen but still burning');
     await click('.ui-header .ui-seg button', 'Dark');
     ok(document.documentElement.classList.contains('ui-dark'), 'about: Dark switches the theme');

@@ -12,26 +12,62 @@ fire itself is a JavaScript engine (three.js r158 + Campfire's own simulation, w
 
 **The fire**
 - Flames are a 2D combustion fluid simulation on the GPU (stable fluids, MacCormack advection, vorticity confinement,
-  buoyancy, rising curl-noise turbulence, combustion expansion, open boundaries), run in 2-3 slices that face the
+  buoyancy, rising curl-noise turbulence, combustion expansion, open boundaries), run in 1-3 slices that face the
   camera (Horvath & Geiger 2009). Fuel enters from random spots on the burning logs. Colour = soot x blackbody
   (Planck + CIE 1931, Wyman 2013), faint blue where fresh gas burns, smoke lit from below, soft edges against the scene.
+- Since 2026-11-11 the pressure is solved by a **multigrid V-cycle** (5-6 grids, 32-bit float) instead of 12-22
+  Jacobi sweeps: the large-scale error in mass conservation is 5-17x smaller, so the plume necks, rolls up and puffs
+  like a buoyant fire, for a third of the pixel work. The simulation runs on bare WebGL 2 (its own programs and
+  one/two-channel textures, no allocations), noise comes from one small texture, and the light is read back through
+  a pixel buffer + fence (no stall). Drawing: bicubic (B-spline) reconstruction, moved along the simulated velocity
+  to the moment of the frame (smooth at a 30 Hz simulation tick), a burn-out edge wrinkled by rising detail noise.
 - The simulation's own brightness is read back every two frames and drives the fire light (colour, intensity,
-  position: the shadows move) and the coal light; the eye adapts (auto exposure) and partly white-balances to firelight.
+  position: the shadows move) and the coal light; the eye adapts (auto exposure) and partly white-balances to
+  firelight. Shadows are soft: a twin of the light without shadows carries part of it (a fire is a wide lamp), and
+  the light falls off with distance^1.6, so the nearest trees glow.
 - Wood model: each log has a species (3 per place), moisture, ignition, mass and char; heat from flames + coals
   reaches it by position. Wet wood dries first (steam hiss, white smoke). Logs shrink, char with glowing alligator
   cracks, collapse into the coal bed; a teepee falls in; untended fires die down over ~30 min; a dead fire can be
   relit with a fresh handful of kindling.
 - Sparks: motion-blurred, energy-conserving streaks, cooling by blackbody, carried by the plume and curl noise,
   bouncing on the ground; bursts on pops, log drops, stirring and collapses. Smoke puffs above the flames.
-- Post: HDR, physically based bloom, heat haze above the fire, AgX tone curve with a "punchy" look, vignette, film grain.
+- Post: HDR (edges smoothed by 2x/4x multisampling on the finer tiers), physically based bloom, heat haze above the
+  fire, AgX tone curve with a "punchy" look, vignette, film grain.
 - Randomness from `crypto.getRandomValues` (xoshiro128**), so no two fires are the same.
 
 **Sound (no recordings, Web Audio)**
 - Fire after Farnell's *Designing Sound*: crackles from a synthesised bank, timed by a self-exciting (Hawkes) process
   per burning log and species, panned to the log; big pops throw sparks; hiss; lapping/roar following the flames'
   flicker; sap whistles; steam hiss for damp wood; match strike, log drop, stir, collapse.
-- Night: crickets at Dolbear's law rate (forest, desert), wind gusts shared with the flames, owl + twig snaps (forest),
-  ice singing/booms + wolves (snow), coyotes with canyon echo (desert); reverb per place. Keeps going in background tabs.
+- Night: crickets at Dolbear's law rate (forest, desert), wind gusts shared with the flames and the trees; reverb per
+  place; things have a bearing (turn around and they move across your ears). Keeps going in background tabs.
+  Forest: a brook (thousands of bubble tones, Minnaert / van den Doel), great horned owls that sometimes answer each
+  other, twig snaps. Snow: ice singing/booms, wolves, a boreal owl's toots, frost cracks, the hush of falling snow.
+  Desert: coyotes with canyon echo, a poorwill, the coffee pot simmering when the fire is hot, thunder long after
+  far lightning, a note in the canyon wind.
+
+**The night around it** (since 2026-11-11)
+- Trees and shrubs lean and tremble in the wind that bends the flames (vertex-shader sway, each plant in its own rhythm).
+- The sky: stars and Milky Way turn about the celestial pole at the true sidereal rate, the moon rides with them
+  (it sets behind the canyon wall in the desert) and dims behind cloud; thin cloud drifts over; shooting stars;
+  the slow parts are painted into cube maps a face at a time and cross-faded (`CF.Sky`).
+- Weather with a state: cloud cover wanders; at the lakeshore snow starts and stops with it; mist sheets drift
+  between the spruces and over the lake ice and catch the firelight; far lightning blinks beyond the canyon rim.
+- Small lives: moths circle the light and wander off (forest), your breath shows in the cold about six times a
+  minute (snow), steam rises from the pot's spout and dust hangs in the firelight (desert).
+
+**Runs on what you have** (since 2026-11-11)
+- Four tiers (`high`, `medium`, `low`, `lite`; Settings: Finest, Balanced, Light, Lightest). "Auto" guesses from the
+  graphics chip's name, memory and cores (software rendering and old phone chips start on `lite`), then a governor
+  watches frame time: it gives up render resolution, edge smoothing, simulation rate (60 -> 30 Hz) and finally a
+  tier, checks each step actually helped (a 30-frame power-saving cap is recognised and everything put back),
+  takes resolution back when there is room, and remembers the result for 14 days (`localStorage campfire.perf`).
+- `lite`: one flame slice, matte materials, no sky reflections, the ground's pattern baked into a texture, cheaper
+  cell noise: about 3x faster than the old lightest setting on a pixel-bound device (CPU rasteriser, phone size:
+  310 ms -> 107 ms a frame; `low` 188 ms).
+- Frames are capped near 60 a second on any screen (the old loop ran 240 on a 240 Hz one), 30 when a phone sits idle
+  or the sleep timer is on, and none at all once the sleep timer has ended (a touch or a key wakes the fire).
+- Trees are instanced (near ones detailed, far ones light), sorted near-first; the stone ring is one mesh.
 
 **Three places** (`html[data-place]` also changes the accent colour and heading font)
 - Boreal midnight: spruce, canvas tent, stump with axe, fireflies, Milky Way, no moon. Woods: pine, birch, maple.
@@ -61,7 +97,8 @@ fire itself is a JavaScript engine (three.js r158 + Campfire's own simulation, w
   says who sat down, left, waved, added a log or stirred. Your logs and stirs are shared with your circle.
 - No text, no chat. News is kept for ten minutes (table `circle_news`).
 - Settings dialog: fire / night volumes, wind (still / breeze / gusty), sleep timer (20/45/90 min, the fire burns down
-  and the sound fades over the last 5 min), keep the fire going (auto-tend), picture quality (auto steps down).
+  and the sound fades over the last 5 min, then drawing stops until you touch the screen), keep the fire going
+  (auto-tend), picture (Auto / Finest / Balanced / Light / Lightest, with a note saying which is drawn).
 - Place picker dialog with real renders of each place (`theme/assets/place-*.jpg`).
 - `#about`: how it works, the three places, things to try, questions, the research it stands on. The fire keeps
   burning (paused on screen, sound on) while it is open.
@@ -87,7 +124,7 @@ What this project uses besides its own code. Generated by `APP_MAKER/tools/libra
 
 **Anvil platform:** Anvil, Anvil Data Tables, Anvil JS bridge (anvil.js), Anvil Users.
 
-**Build and test tools (not shipped):** axe-core, Node.js, PyYAML, Headless Chrome (DevTools Protocol).
+**Build and test tools (not shipped):** axe-core, Node.js, Headless Chrome (DevTools Protocol), PyYAML.
 
 <!-- libraries:end -->
 

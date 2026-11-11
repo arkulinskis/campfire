@@ -22,8 +22,9 @@ def apply(stage, s):
 
 
 class Settings(SettingsTemplate):
-    """Sound, wind, the sleep timer, auto-tending and picture quality. Every change applies at once and is saved in
-    this browser. Shown with alert(Settings(stage=...), buttons=[], role="app-dialog")."""
+    """Sound, wind, the sleep timer, auto-tending and picture quality (auto, or one of the engine's four tiers: high,
+    medium, low, lite). Every change applies at once and is saved in this browser. Shown with
+    alert(Settings(stage=...), buttons=[], role="app-dialog")."""
 
     def __init__(self, stage, **properties):
         self.stage = stage
@@ -38,15 +39,21 @@ class Settings(SettingsTemplate):
     def _draw(self):
         for v, el in ((0, self.wind_0), (1, self.wind_1), (2, self.wind_2)):
             el.classes["on"] = self.s["wind"] == v
-        for v, el in (("auto", self.q_auto), ("high", self.q_high), ("medium", self.q_medium), ("low", self.q_low)):
+        for v, el in (("auto", self.q_auto), ("high", self.q_high), ("medium", self.q_medium), ("low", self.q_low),
+                      ("lite", self.q_lite)):
             el.classes["on"] = self.s["quality"] == v
         left = self.sleep_left
         pick = 0 if not left else min((20, 45, 90), key=lambda m: abs(m - left))
         for v, el in ((0, self.sleep_0), (20, self.sleep_20), (45, self.sleep_45), (90, self.sleep_90)):
             el.classes["on"] = pick == v
         q = self.stage.state().get("quality") or "medium"
-        self.quality_note.text = "Now drawing at %s quality. Lighter pictures save battery." % {
-            "high": "the finest", "medium": "balanced", "low": "light"}.get(q, q)
+        name = {"high": "finest", "medium": "balanced", "low": "light", "lite": "lightest"}.get(q, q)
+        if self.s["quality"] == "auto":
+            self.quality_note.text = ("Auto chose the %s picture for this device. It eases off by itself if the fire "
+                                      "stops running smoothly, and remembers what worked." % name)
+        else:
+            self.quality_note.text = ("Drawing the %s picture. Lighter pictures save battery; Lightest is made for "
+                                      "older phones." % name)
 
     def _save(self):
         state.store_set("settings", self.s)

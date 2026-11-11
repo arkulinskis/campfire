@@ -8,8 +8,12 @@
    - Lapping / roar: low noise whose level follows the simulated flames' own flicker (read back from the GPU).
    - Sap whistles: faint tonal squeals from boiling resin.
    Night: crickets chirping at the rate Dolbear's law gives for the night's temperature, wind gusts (the same
-   gusts bend the flames), and each place's animals: owls (forest), lake ice singing and wolves (snow), coyotes
-   echoing off the canyon walls (desert). Reverb from a synthesised impulse response per place.
+   gusts bend the flames and the trees), and each place's own company. Forest: a brook somewhere behind you
+   (bubbles, each a tiny sine: Minnaert), great horned owls, sometimes two answering each other. Snow: lake ice
+   singing, wolves, a boreal owl's run of toots, frost cracking in the trees, the hush of falling snow when it
+   snows. Desert: coyotes echoing off the canyon walls, a poorwill, the coffee pot simmering by the stones when
+   the fire is hot, and thunder rolling in long after the lightning. Things at a place have a bearing: turn
+   around and they move across your ears. Reverb from a synthesised impulse response per place.
    Events are scheduled ahead of time, so the fire keeps crackling in a background tab. */
 (function () {
   'use strict';
@@ -46,6 +50,7 @@
     this.wind = this.loop(this.pink, [['bandpass', 420, 0.9]], this.night, 0);
     this.windHi = this.loop(this.white, [['highpass', 2400, 0.5], ['lowpass', 7000, 0.5]], this.night, 0);
     this.windF = this.wind.filters[0];
+    this.hush = this.loop(this.white, [['highpass', 6500, 0.5], ['lowpass', 12000, 0.5]], this.night, 0);   // snow falling
     this.hawkes = 0; this.nextBase = 0; this.lastT = c.currentTime; this.sched = {};
     this.crickets = [];
     this.setPlace(this.place);
@@ -141,6 +146,18 @@
     this.echoIn.gain.value = place === 'desert' ? 0.5 : 0;
     this.crickets.forEach(function (k) { try { k.osc.stop(); } catch (e) {} });
     this.crickets = [];
+    this.drop(this.brook); this.drop(this.pot); this.brook = this.pot = null;
+    var token = this.placeToken = (this.placeToken || 0) + 1;
+    if (place === 'forest') {   // a brook, off behind the tent
+      this.waterBuf(9, 85, 700, 4200, 0.05, function (buf) {
+        if (self.placeToken === token) self.brook = self.place3(buf, [['highpass', 500, 0.5], ['lowpass', 3600, 0.5]], self.night, 3.9, 0.5);
+      });
+    } else if (place === 'desert') {   // the coffee pot by the stones (cf-world.js puts it there)
+      this.waterBuf(6, 16, 260, 900, 0.02, function (buf) {
+        if (self.placeToken === token) self.pot = self.place3(buf, [['lowpass', 1500, 0.6]], self.fire, 1.18, 0.05);
+      });
+    }
+    this.windF.Q.value = place === 'desert' ? 2.2 : 0.9;   // the canyon gives the wind a note
     var tempC = place === 'forest' ? 15 + CF.rng.range(-2, 3) : place === 'desert' ? 19 + CF.rng.range(-2, 3) : null;
     if (tempC !== null) {
       var n = place === 'forest' ? 5 : 4;
@@ -155,7 +172,7 @@
         this.crickets.push({ osc: o, gain: g, period: 60 / perMin, next: now + CF.rng.range(0.2, 3), amp: CF.rng.logUniform(0.012, 0.045), pulses: CF.rng.int(2, 4), rest: 0 });
       }
     }
-    var A = place === 'forest' ? { owl: 75, snap: 110 } : place === 'snow' ? { ice: 38, wolf: 160 } : { coyote: 140, snap: 160 };
+    var A = place === 'forest' ? { owl: 75, snap: 110 } : place === 'snow' ? { ice: 38, wolf: 160, toot: 170, frost: 80 } : { coyote: 140, snap: 160, poorwill: 110 };
     this.sched = {};
     Object.keys(A).forEach(function (k) { self.sched[k] = { mean: A[k], next: now + CF.rng.expo(A[k] * 0.4) + 6 }; });
   };
@@ -174,7 +191,10 @@
     this.steam.gain.gain.setTargetAtTime(0.05 * s.wet * near, now, 0.4);
     var gust = s.gust;
     this.wind.gain.gain.setTargetAtTime(0.03 + 0.18 * gust, now, 0.4);
-    this.windF.frequency.setTargetAtTime(300 + 500 * gust, now, 0.6);
+    this.windF.frequency.setTargetAtTime(this.place === 'desert' ? 190 + 260 * gust : 300 + 500 * gust, now, 0.6);
+    this.hush.gain.gain.setTargetAtTime(this.place === 'snow' ? 0.014 * (s.snow || 0) : 0, now, 2);
+    if (this.brook) { this.brook.gain.gain.setTargetAtTime(0.06 * (1 - 0.3 * Math.min(1, gust)), now, 1.5); this.brook.pan.pan.setTargetAtTime(this.panFor(this.brook.az) * 0.85, now, 0.15); }
+    if (this.pot) { this.pot.gain.gain.setTargetAtTime(0.05 * CF.clamp(((s.heat || 0) - 0.45) * 1.6, 0, 1) * near, now, 3); this.pot.pan.pan.setTargetAtTime(this.panFor(this.pot.az) * 0.5, now, 0.15); }
     this.windHi.gain.gain.setTargetAtTime((this.place === 'forest' ? 0.012 : 0.006) + (this.place === 'forest' ? 0.05 : 0.02) * gust * gust, now, 0.5);
   };
   Audio.prototype.panFor = function (az) { var y = this.state ? this.state.yaw : 0; return Math.max(-1, Math.min(1, Math.sin(az - y))); };
@@ -291,9 +311,99 @@
     for (var i = 0; i < 14; i++) this.crackle(t + R.expo(0.18), pan, i < 2, null);
     this.hawkes += 25;
   };
+  // ---- water, made of bubbles. A brook's babble (and a pot's simmer) is the ringing of air bubbles: each one a short
+  // sine whose pitch follows its size (Minnaert 1933: about 3.26 / radius in metres, in Hz) and rises as it nears the
+  // surface (van den Doel, "Physically based models for liquid sounds", 2005). Thousands of them, written into a
+  // buffer that loops without a seam (bubbles that run off the end wrap round to the start).
+  // It is built a few dozen bubbles at a time between frames (a phone would stall for half a second otherwise)
+  // and handed to `done` when ready.
+  Audio.prototype.waterBuf = function (sec, perSec, fLo, fHi, bed, done) {
+    var R = CF.rng, sr = this.sr, n = Math.floor(sr * sec), b = this.ctx.createBuffer(2, n, sr), ctx = this.ctx, self = this;
+    var total = Math.round(sec * perSec) * 2, made = 0;
+    function some() {
+      if (self.ctx !== ctx) return;                 // the sound was stopped meanwhile
+      var until = Math.min(total, made + 40), i;
+      for (; made < until; made++) {
+        var d = b.getChannelData(made & 1);
+        var f0 = R.logUniform(fLo, fHi), tau = R.range(5, 16) / f0 * sr, len = Math.min(n, Math.floor(tau * 6)), rise = R.range(0.05, 0.6) / len;
+        var amp = Math.pow(R.next(), 2.2) * Math.sqrt(fLo / f0), at = R.int(0, n - 1), ph = 0, w = 6.2832 * f0 / sr, att = Math.max(8, 0.0008 * sr);
+        for (i = 0; i < len; i++) { ph += w * (1 + rise * i); d[(at + i) % n] += Math.sin(ph) * amp * Math.exp(-i / tau) * Math.min(1, i / att); }
+      }
+      if (made < total) { setTimeout(some, 12); return; }
+      for (var ch = 0; ch < 2; ch++) {
+        var c = b.getChannelData(ch), peak = 0;
+        if (bed) {   // the wash underneath: band-limited noise
+          var bp = biquad('bp', 900, 0.5, sr), bp2 = biquad('bp', 2400, 0.7, sr);
+          for (i = 0; i < n; i++) { var x = R.next() * 2 - 1; c[i] += (bp(x) * 0.6 + bp2(x) * 0.3) * bed; }
+          var f = Math.floor(sr * 0.08); for (i = 0; i < f; i++) { var t = i / f; c[i] = c[i] * t + c[n - f + i] * (1 - t); }
+        }
+        for (i = 0; i < n; i++) { var a = Math.abs(c[i]); if (a > peak) peak = a; }
+        var g = 0.5 / (peak || 1); for (i = 0; i < n; i++) c[i] *= g;
+      }
+      done(b);
+    }
+    setTimeout(some, 30);
+  };
+  // a looping sound that sits at a fixed bearing around the camp (the brook over there, the pot by the stones):
+  // its pan follows the way you turn
+  Audio.prototype.place3 = function (buf, filters, dest, az, verb) {
+    var c = this.ctx, l = this.loop(buf, filters, dest, 0), pan = c.createStereoPanner();
+    l.gain.disconnect(); l.gain.connect(pan); pan.connect(dest);
+    if (verb) { var v = c.createGain(); v.gain.value = verb; pan.connect(v); v.connect(this.verb); }
+    l.pan = pan; l.az = az;
+    return l;
+  };
+  Audio.prototype.drop = function (l) { if (!l) return; try { l.src.stop(); } catch (e) {} try { l.gain.disconnect(); if (l.pan) l.pan.disconnect(); } catch (e2) {} };
+
+  // far thunder, long after the flash: a low roll that swells two or three times and dies away
+  Audio.prototype.thunder = function (delay, strength, pan) {
+    if (!this.ctx) return;
+    var c = this.ctx, R = CF.rng, t = c.currentTime + delay, dur = R.range(5, 9), s = c.createBufferSource(); s.buffer = this.brown; s.loop = true;
+    var lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.5; lp.frequency.setValueAtTime(150, t); lp.frequency.exponentialRampToValueAtTime(55, t + dur);
+    var g = this.out(t, (pan || 0) * 0.5, 0, this.night, 0.7), top = 0.13 * Math.min(1, strength);
+    s.connect(lp); lp.connect(g);
+    g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(top, t + R.range(0.3, 0.7));
+    for (var k = 1, n = R.int(2, 4); k <= n; k++) g.gain.linearRampToValueAtTime(top * R.range(0.25, 0.9) * (1 - k / (n + 1)), t + dur * k / (n + 1));
+    g.gain.linearRampToValueAtTime(0, t + dur);
+    s.start(t, R.range(0, 5)); s.stop(t + dur + 0.1);
+  };
+  // common poorwill (desert): a soft whistled "poor-will", over and over, from somewhere on the canyon floor
+  Audio.prototype.poorwill = function (t, pan) {
+    var c = this.ctx, R = CF.rng, n = R.int(5, 13), f = R.range(1150, 1350), gap = R.range(1.25, 1.6), amp = R.range(0.012, 0.028);
+    var lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3200; var g = this.out(t, pan, 1, this.night, 0.8); lp.connect(g);
+    if (this.echoIn) lp.connect(this.echoIn);
+    for (var k = 0; k < n; k++) {
+      var s = t + k * gap + R.range(-0.03, 0.03), o = c.createOscillator(), e = c.createGain(), a = amp * (0.6 + 0.4 * Math.sin(Math.PI * (k + 0.5) / n));
+      o.frequency.setValueAtTime(f, s); o.frequency.setValueAtTime(f, s + 0.13); o.frequency.linearRampToValueAtTime(f * 0.97, s + 0.19);
+      o.frequency.linearRampToValueAtTime(f * 1.34, s + 0.36); o.frequency.linearRampToValueAtTime(f * 1.5, s + 0.4);
+      e.gain.setValueAtTime(0, s); e.gain.linearRampToValueAtTime(a, s + 0.02); e.gain.setValueAtTime(a, s + 0.11); e.gain.linearRampToValueAtTime(a * 0.15, s + 0.17);
+      e.gain.linearRampToValueAtTime(a * 1.1, s + 0.24); e.gain.setValueAtTime(a * 1.1, s + 0.34); e.gain.linearRampToValueAtTime(0, s + 0.42);
+      o.connect(e); e.connect(lp); o.start(s); o.stop(s + 0.45);
+    }
+  };
+  // boreal owl (snow): a quick run of soft toots that swells and stops
+  Audio.prototype.toot = function (t, pan) {
+    var c = this.ctx, R = CF.rng, n = R.int(8, 15), f = R.range(680, 800), amp = R.range(0.012, 0.026), step = R.range(0.115, 0.14);
+    var lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1800; var g = this.out(t, pan, 1, this.night, 1.0); lp.connect(g);
+    for (var k = 0; k < n; k++) {
+      var s = t + k * step, o = c.createOscillator(), e = c.createGain(), a = amp * (0.35 + 0.65 * Math.min(1, (k + 1) / (n * 0.7)));
+      o.frequency.setValueAtTime(f * 0.97, s); o.frequency.linearRampToValueAtTime(f, s + 0.03);
+      e.gain.setValueAtTime(0, s); e.gain.linearRampToValueAtTime(a, s + 0.015); e.gain.setValueAtTime(a, s + 0.05); e.gain.linearRampToValueAtTime(0, s + 0.085);
+      o.connect(e); e.connect(lp); o.start(s); o.stop(s + 0.1);
+    }
+  };
+  // frost crack (snow): sap freezing in a trunk somewhere in the trees, a dry knock with the lake's echo behind it
+  Audio.prototype.frost = function (t, pan) {
+    var c = this.ctx, R = CF.rng, n = R.chance(0.3) ? 2 : 1;
+    for (var k = 0; k < n; k++) {
+      var s = c.createBufferSource(), tt = t + k * R.range(0.18, 0.5); s.buffer = R.pick(this.pops); s.playbackRate.value = R.range(0.45, 0.7);
+      var lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2000; s.connect(lp);
+      lp.connect(this.out(tt, pan, R.range(0.05, 0.11), this.night, 1.4)); s.start(tt);
+    }
+  };
   // ---- animals and the land (t = when, pan = where)
-  Audio.prototype.owl = function (t, pan) {   // great horned owl: hoo, h-hoo, hoo, hoo
-    var c = this.ctx, R = CF.rng, f0 = R.range(270, 330), pattern = [[0, 0.32], [0.55, 0.14], [0.72, 0.42], [1.42, 0.38], [2.05, 0.42]];
+  Audio.prototype.owl = function (t, pan, answer) {   // great horned owl: hoo, h-hoo, hoo, hoo
+    var c = this.ctx, R = CF.rng, f0 = answer ? R.range(335, 390) : R.range(270, 330), pattern = [[0, 0.32], [0.55, 0.14], [0.72, 0.42], [1.42, 0.38], [2.05, 0.42]];
     var lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 900; var g = this.out(t, pan, R.range(0.04, 0.08), this.night, 0.9); lp.connect(g);
     pattern.forEach(function (p) {
       var o = c.createOscillator(), e = c.createGain(), s = t + p[0], d = p[1];
@@ -301,6 +411,7 @@
       e.gain.setValueAtTime(0, s); e.gain.linearRampToValueAtTime(1, s + 0.06); e.gain.setValueAtTime(0.85, s + d - 0.08); e.gain.linearRampToValueAtTime(0, s + d);
       o.connect(e); e.connect(lp); o.start(s); o.stop(s + d + 0.05);
     });
+    if (!answer && R.chance(0.45)) this.owl(t + R.range(3.5, 7), pan > 0 ? R.range(-1, -0.2) : R.range(0.2, 1), true);   // its mate answers from the other side, a little higher
   };
   Audio.prototype.snap = function (t, pan) {
     var s = this.ctx.createBufferSource(); s.buffer = CF.rng.pick(this.bank); s.playbackRate.value = 0.55;
@@ -329,7 +440,7 @@
     var f1 = c.createBiquadFilter(); f1.type = 'bandpass'; f1.frequency.value = base * 1.6; f1.Q.value = 3;
     var f2 = c.createBiquadFilter(); f2.type = 'lowpass'; f2.frequency.value = 1600;
     var g = this.out(t, pan, 0, this.night, 1.0); o.connect(f1); f1.connect(f2); f2.connect(g);
-    if (this.echoIn && this.place === 'desert') f2.connect(this.echoIn);
+    if (this.echoIn && this.place === 'desert') g.connect(this.echoIn);   // the echo hears the call as shaped, not the raw tone
     g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(R.range(0.05, 0.09), t + dur * 0.2); g.gain.setValueAtTime(0.06, t + dur * 0.75); g.gain.linearRampToValueAtTime(0, t + dur);
     o.start(t); vib.start(t); o.stop(t + dur + 0.1); vib.stop(t + dur + 0.1);
   };
@@ -342,7 +453,7 @@
     for (var i = 0; i < n; i++) {   // yips
       var o = c.createOscillator(), d = R.range(0.06, 0.16), g = this.out(tt, pan + R.range(-0.15, 0.15), 0, this.night, 1.1);
       o.type = 'triangle'; o.frequency.setValueAtTime(R.range(550, 800), tt); o.frequency.exponentialRampToValueAtTime(R.range(900, 1400), tt + d);
-      var lp = c.createBiquadFilter(); lp.frequency.value = 2200; o.connect(lp); lp.connect(g); if (this.echoIn) lp.connect(this.echoIn);
+      var lp = c.createBiquadFilter(); lp.frequency.value = 2200; o.connect(lp); lp.connect(g); if (this.echoIn) g.connect(this.echoIn);
       g.gain.setValueAtTime(0, tt); g.gain.linearRampToValueAtTime(R.range(0.02, 0.05), tt + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, tt + d);
       o.start(tt); o.stop(tt + d + 0.05); tt += d + R.range(0.03, 0.18);
     }

@@ -26,6 +26,11 @@ far: all three design directions (one per place); flame shape "B: Full body" (sp
 licking tongues". Design: Boreal midnight base (ember #ff8a3d on #07080a, parchment ink #efe6da, Cormorant Garamond
 + Inter); snow lends EB Garamond + #9cc3ff, desert Spectral + #d9a35b (html[data-place]). The fire page and its
 dialogs are always night; About follows light/dark. Mobile-first, 390 px.
+2026-11-11: "the feeling humans feel while away from technology. Peace is the goal": better fire, more atmosphere
+in every place, and it must run on lower-tier devices. So: nothing startling (every night sound sits at about the
+same quiet level: measure with tools/dev/sound.js), nothing that hitches (no allocations in the frame, no GPU
+stalls), nothing that reads as computer graphics (smooth edges, soft shadows, no teeth on the flames), and a
+night that changes by itself while you sit.
 
 ## Workflow for any change
 
@@ -39,6 +44,9 @@ dialogs are always night; About follows light/dark. Mobile-first, 390 px.
    (true 390 px, no sideways scroll) and a11y.js (axe-core WCAG 2.2 AA on every page, light + dark, plus
    keyboard checks). Client edits show on reload; server edits need `--restart`. `--only a11y.js` runs one script.
    `--shots DIR` = screenshots of every page, desktop + phone, light + dark, guest + member: Read them.
+   **For anything in the engine, look and measure first** (`tools/dev/README.md`): `python -I tools/dev/look.py
+   shots OUT --gpu` draws on this PC's graphics card through headless Chrome (a screenshot in seconds, real frame
+   rates); metrics.js / bench.js / profile.js / govern.js / sound.js give numbers. Read the PNGs.
 5. Commit only your files as arkulinskis with the Co-Authored-By line; `git push origin master`.
    New tables/columns: tell the user to accept the **Schema Mismatch** alert ("The schema of the source code is correct").
 
@@ -64,7 +72,8 @@ server_code/               common.py (C.*), Presence.py (ember_heartbeat, circle
 theme/assets/              cf-*.js (the engine), three.min.js, app.css (tokens + pages + role layer), icons.css
                            (generated), app-kit.js, theme.css (spinner), icon.svg + PNGs, place-*.jpg
 tools/                     check.py, assets.py, build_icons.py, make_icons.py, ui_test.py + ui/ (flow, phone, a11y),
-                           live/drive.mjs (SwiftShader), testing/
+                           live/drive.mjs (SwiftShader, or ANGLE=d3d11 for the real GPU), testing/,
+                           dev/ (the engine alone: harness.html, look.py, metrics/bench/profile/govern/sound.js)
 ```
 
 ## How things are done here
@@ -119,21 +128,45 @@ tools/                     check.py, assets.py, build_icons.py, make_icons.py, u
 
 ## The fire engine (theme/assets/cf-*.js, window.CF)
 
-- `cf-core.js` session RNG from crypto (CF.rng), OU processes, CPU noise/curl, GLSL helpers (noise, cells, bump),
-  blackbody LUT (theta 0..1.4 -> 300 + 1100 theta K; rgb = chroma, a = log luminance).
-- `cf-fire.js` FireSim (one slice: curl, forces, advect, divergence, Jacobi x iters, project, react, MacCormack) and
-  FireVolume (2-3 camera-facing slices; spots in 3D -> slice coords with `spread`; reduce + readPixels for the light).
-  Tuning knobs: FireSim `params` (buoy, vort, turb, jet, burnK, heat, sootY, ox, coolRad, coolLin, fuelRate, expand);
-  slice shader `uGain`, `uSoftLum` (luminance curve), `uBlue`; FireVolume `spread`. Measure, don't guess: the dev
-  probe reads the middle slice and reports h50/h90 (flame height, m) and w80 (width); ~0.6 / 1.1 / 0.2-0.35 now.
-- `cf-fx.js` Sparks (instanced streaks), Smoke (instanced puffs), Motes (fireflies/snow), Post (opaque RT with depth
-  texture -> depth copy -> transparents -> 13-tap bloom -> final: haze, WB, exposure, AgX "punchy", vignette, grain).
-- `cf-world.js` CF.PLACES (sky, fog, moon, exposure, woods, terrain height) + CF.buildWorld; every surface is
-  MeshStandardMaterial patched by CF.patch(albedo/rough/bump/glow GLSL). Logs: CF.makeLogGeo/makeLogMat (char cracks).
-- `cf-audio.js` CF.Audio (crackle bank + Hawkes scheduler, loops, place soundscapes, one-shots).
-- `cf-engine.js` CF.create/CF.shared; wood model (updateFire), spots, step (sim, readback, lights, exposure, draw),
-  camera + input, API: light, addLog, stir, setPlace, setWind, setVolume, setAutoTend, setSleep, sound, state, warp,
-  attach, pause, setHandlers. `window.CF_TEST = {quality: 'low'}` (set by `?cftest=1`) for tests.
+- `cf-core.js` session RNG from crypto (CF.rng), OU processes, CPU noise/curl, GLSL helpers (noise, cells, bump;
+  `#define CF_OCT 3` = the lite tier's cheaper versions), blackbody LUT (theta 0..1.4 -> 300 + 1100 theta K; rgb =
+  chroma, a = log luminance), `CF.noiseTexture()` (256 px tile: rg = curl of value noise, b = fbm, a = value noise;
+  the flame shaders read it instead of hashing).
+- `cf-fire.js` runs on **bare WebGL 2** (`CF.gpu(renderer)`: its own programs, FBOs, R16F/RG16F/RGBA16F/R32F
+  textures; `G.begin()` ... passes ... `G.end()` = `renderer.resetState()`; `G.wrap(glTexture)` gives three a
+  texture to sample). FireSim = one slice, per step: curl, advect+forces (one pass), divergence, a multigrid
+  V-cycle (`levels` grids: smooth / restrict / prolong; 32-bit float pressure; `mg: {levels, pre, post, coarse}`),
+  project, MacCormack forward + back, then correction + limiter + sources + chemistry in one pass (`react`).
+  FireVolume = 1-3 camera-facing slices (spots in 3D -> slice coords with `spread`), an 8x8 light summary read
+  back through a pixel buffer + fence (`readback()`: `.fresh` when new; `readback(1, true)` waits, for tests).
+  Tuning knobs: FireSim `params` (buoy, vort, turb, jet, burnK, heat, sootY, ox, coolRad, coolLin, fuelRate,
+  expand); slice uniforms through `fire.setLook(name, value)`: `uEdge` (where a flame's edge burns out), `uBodyK`
+  / `uRimK` (how much the detail noise mottles the body / wrinkles the edge), `uDetail`, `uRise`, `uFlow`, `uGain`,
+  `uSoftLum`, `uBlue`. **Measure, don't guess:** `tools/dev/metrics.js` on the standard burner gives h50 / h90
+  (flame height, m), w80 (width) and the divergence left; 0.29 / 0.48 / 0.18 now on every tier (the real fire with
+  3-4 logs is about twice that tall). Grid sizes must halve cleanly 4-5 times (160x288, 96x160, 64x112, 48x80).
+- `cf-fx.js` Sparks (instanced streaks), Smoke + Puffs (instanced puffs: fire smoke; breath and pot steam), Mist
+  (drifting sheets, soft against the scene's depth, lit by the fire), Motes (fireflies / snow with `setAmount` /
+  dust / moths), Post (opaque RT with depth texture, `samples` = MSAA -> depth copy -> transparents -> 13-tap
+  bloom -> final: haze, WB, exposure, AgX "punchy", vignette, grain).
+- `cf-world.js` CF.PLACES (sky, fog, moon, exposure, woods, terrain height, + lat, cloud, mist, moths, breath,
+  lightning, farGround) + CF.buildWorld; every surface is a material from `std()` patched by CF.patch(albedo /
+  rough / bump / glow GLSL, optional `sway` = wind in the vertex shader). `CF.lite` (set by buildWorld for the
+  lite tier): `std()` gives Lambert, no environment map, the ground's pattern is baked to a texture
+  (`bakeGround`). Trees: `plant()` = InstancedMesh per shape, sorted near-first, far ones from the light
+  `spruceGeo(.., far)`; keep the random-number order in the loops or the layout of "your spot" changes. `CF.Sky`:
+  slow sky in three cube maps (one face painted every few frames, two cross-faded), stars + moon disc + shooting
+  star + lightning drawn directly, everything turning with `rotation(time)`. Logs: CF.makeLogGeo/makeLogMat.
+- `cf-audio.js` CF.Audio (crackle bank + Hawkes scheduler, loops, place soundscapes, one-shots; `waterBuf` builds
+  the brook / the pot from bubbles between frames; `place3` = a loop with a bearing; scheduler kinds per place in
+  `setPlace`: add a kind = add a method `Audio.prototype.<kind>(t, pan)` and an entry in `A`).
+- `cf-engine.js` CF.create/CF.shared; TIERS (high / medium / low / lite) + `CF.guessTier`; the governor
+  (`govern`, `stepDown`, `savePerf` -> localStorage `campfire.perf`); frame pacing in `loop` (about 60 a second,
+  30 `resting()`, none `asleep`); wood model (updateFire), spots, `weather` (cloud, snow, moon, lightning, mist,
+  moths, breath, steam), step (sim, readback, lights, exposure, draw), camera + input, API: light, addLog, stir,
+  setPlace, setWind, setVolume, setAutoTend, setSleep, setQuality, sound, state, warp, wake, attach, pause,
+  setHandlers. Events to the page: lit, log, stir, collapse, place, quality, slept, woke, eased, wave_to.
+  `window.CF_TEST = {quality: 'low'}` (set by `?cftest=1`) for tests: fixed tier, no governor, no rest.
 - `cf-people.js` CF.People (engine.people): the others in your circle. SEATS = a per-viewer arc ACROSS the fire
   (k = seat - mySeat mod 6; k = 3, the second arrival, on the seat log right of the flames, not behind them); people
   beside the camera would be huge. Person = merged geometries: legs + lap blanket (lapGeo) + lathe body + blanket
@@ -144,8 +177,10 @@ tools/                     check.py, assets.py, build_icons.py, make_icons.py, u
   Engine API: setCircle(json), circleAct(seat, kind, to, wood, wet), addLog(wood, wet, fromPos), onEvent('wave_to').
 - Python side: `client_code/fire.py` (one door), `Components/FireStage` (custom component, events state_change and
   fire_event; set_circle, circle_act), `Pages/Fire` (UI, status text, idle fade, keys, heartbeat + circle).
-- **Dev loop for looks:** a standalone harness (index.html loading three + cf-*.js, served locally) driven by
-  tools/live/drive.mjs with SwiftShader; `fire.warp(sec)` ages the fire without drawing. Look at 3 frames ~1 s apart.
+- **Dev loop for looks:** `tools/dev/` (see its README): `look.py shots OUT --gpu`, or your own steps with
+  `look.py run`. `F.warp(sec)` ages the fire without drawing. Look at 3 frames about a second apart, and at a
+  close-up (`F.cam.tdist = 2`): the flames' edges show problems first. Freeze a moment (empty `F.fire.step`) to
+  compare two settings on the same flames.
 
 ## Recipes
 
@@ -170,6 +205,27 @@ tools/                     check.py, assets.py, build_icons.py, make_icons.py, u
   first or the App Server serves the old files.
 
 ## Gotchas
+- **Flame teeth.** Regular serrations along flame edges came from three things, in this order of blame: vorticity
+  confinement too strong for an accurate pressure solve (`vort` 8 -> 4), the full MacCormack correction stair-stepping
+  on slanted fronts (0.5 -> 0.4), and a checkerboard ripple the same-grid pressure solve cannot see (a third of a
+  two-cell average is mixed into the advected velocity). Detail noise sheared by the local velocity ("flow maps")
+  makes combs across the edges too: keep `uFlow` small.
+- **Multigrid** on a cell-centred grid diverges unless every grid puts the open boundary in the same place: p = 0
+  ON the face (ghost value = minus the inside value), not at the ghost cell's centre. And the pressure needs
+  32-bit floats: the residual is a difference of nearly equal numbers that half floats cannot hold (without
+  EXT_color_buffer_float the solver falls back to 14 Jacobi sweeps on one grid). tools/dev has no CPU model any
+  more; the check is `divLarge` in metrics.js.
+- **A new tier or a change of light:** the middle slice's light reading is scaled by `lightShare` (slices; 2.6 for
+  one slice). One slice also takes only 62% of the fuel (`share` in setSources) or its flames double in height.
+- **The governor must see its steps help.** Frame time alone cannot tell a slow chip from a 30-frame cap (a phone's
+  power-saving mode): `stepDown` compares frame time with before the last step, skips ahead when pixels do not
+  help, and after a fruitless tier drop puts everything back and accepts the pace (`gov.capMs`).
+- Raw GL inside three.js: call `renderer.resetState()` after (G.end() does), never leave a VAO or a pixel-pack
+  buffer bound, and give sampler uniforms their units once at link time.
+- The coyote and howl echoes used to be fed the raw oscillators (10x louder than the call): send the *shaped*
+  signal (`g`) to `echoIn`.
+- theme/assets/place-*.jpg (About page, place picker) are real renders: remake them after a change of look with
+  `look.py shots OUT --gpu --size 1200,675 --q high --warp 300` + a resize to 1200x675 JPEG.
 - Headless Chrome draws ~2 frames a second with SwiftShader and dt is capped at 0.1 s, so people's animations run
   ~5x slow in tests: flow.js fast-forwards them with `F().people.update(0.4, ...)`. Visitors from a run in the
   last 3 minutes still sit in the test circle (flow.js copes, waits if the circle is full).

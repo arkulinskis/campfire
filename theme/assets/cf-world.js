@@ -4,7 +4,10 @@
    "desert" (canyon: sandstone walls, boulders, a dead juniper, quarter moon, the Milky Way at its best).
    Every surface is a MeshStandardMaterial patched with procedural shaders (albedo, roughness, bump, glow), so
    the fire's light, shadows and the sky's reflections work on everything. Layouts are fixed per place (it is
-   *your* spot); the fire and its logs are random every visit. */
+   *your* spot); the fire and its logs are random every visit.
+   The night is alive: trees and shrubs lean and tremble in the same wind that bends the flames (CF.U.uWind, a
+   vertex-shader sway), cloud drifts across the stars, the stars turn (CF.Sky), and each place has its own
+   weather (cf-engine.js drives it: mist, snow flurries, far lightning). */
 (function () {
   'use strict';
   var CF = window.CF = window.CF || {};
@@ -14,15 +17,18 @@
   // spec: {uniforms, decl (GLSL top), albedo (sets col, h), rough (sets rough), bump (k), emissive (adds to glow vec3), attr}
   CF.patch = function (mat, spec) {
     mat.userData.cf = spec;
-    mat.customProgramCacheKey = function () { return spec.key || spec.albedo || 'cf'; };
+    var lite = !!CF.lite;
+    mat.customProgramCacheKey = function () { return (spec.key || spec.albedo || 'cf') + (lite ? '-lite' : ''); };
     mat.onBeforeCompile = function (sh) {
       Object.keys(spec.uniforms || {}).forEach(function (k) { sh.uniforms[k] = spec.uniforms[k]; });
       var attr = spec.attr ? 'attribute float ' + spec.attr + '; varying float vAttr;\n' : '';
+      if (spec.sway) { sh.uniforms.uWind = CF.U.uWind; attr += 'uniform vec3 uWind;\n'; }
       sh.vertexShader = sh.vertexShader
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + (spec.sway ? swayGLSL(spec.sway) : ''))
         .replace('#include <common>', '#include <common>\n' + attr + 'varying vec3 vWP; varying vec3 vOP; varying vec3 vON;')
         .replace('#include <project_vertex>', '#include <project_vertex>\n vec4 cfW = vec4(transformed, 1.);\n#ifdef USE_INSTANCING\n cfW = instanceMatrix * cfW;\n#endif\n vWP = (modelMatrix * cfW).xyz; vOP = transformed; vON = objectNormal;' + (spec.attr ? ' vAttr = ' + spec.attr + ';' : ''));
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vWP; varying vec3 vOP; varying vec3 vON;' + (spec.attr ? ' varying float vAttr;' : '') + '\n' + CF.GLSL + '\n' + (spec.decl || '') + '\nfloat cfH = 0.; vec3 cfGlow = vec3(0.); float cfRough = -1.;')
+        .replace('#include <common>', '#include <common>\nvarying vec3 vWP; varying vec3 vOP; varying vec3 vON;' + (spec.attr ? ' varying float vAttr;' : '') + '\n' + (lite ? '#define CF_OCT 3\n' : '') + CF.GLSL + '\n' + (spec.decl || '') + '\nfloat cfH = 0.; vec3 cfGlow = vec3(0.); float cfRough = -1.;')
         .replace('#include <color_fragment>', '#include <color_fragment>\n{ vec3 col = diffuseColor.rgb; float h = 0.; float rough = -1.; vec3 glow = vec3(0.);\n' + (spec.albedo || '') + '\n diffuseColor.rgb = col; cfH = h; cfRough = rough; cfGlow = glow; }')
         .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n if (cfRough >= 0.) roughnessFactor = cfRough;')
         .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + (spec.bump ? ' normal = cfBump(-vViewPosition, normal, cfH, ' + spec.bump.toFixed(4) + ');' : ''))
@@ -30,20 +36,90 @@
     };
     return mat;
   };
-  function std(o) { return new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.92, metalness: 0 }, o || {})); }
+  // wind sway for anything rooted: the whole plant leans with the wind (more towards its top, each one in its own
+  // rhythm), and its outer parts tremble. sway = {amp: metres at the top per unit of wind, h: height of the top,
+  // flutter: metres}. uWind = (wind x, wind z, time).
+  function swayGLSL(w) {
+    return [
+      ' {',
+      '#ifdef USE_INSTANCING',
+      '  mat4 cfMM = modelMatrix * instanceMatrix;',
+      '#else',
+      '  mat4 cfMM = modelMatrix;',
+      '#endif',
+      '  mat3 cfM = mat3(cfMM); float cfPh = cfMM[3].x * .37 + cfMM[3].z * .51, cfT = uWind.z, cfW = length(uWind.xy);',
+      '  float cfK = pow(clamp(position.y / ' + w.h.toFixed(2) + ', 0., 1.), 1.7);',
+      '  vec2 cfG = uWind.xy * (.55 + .45 * sin(cfT * .6 + cfPh)) + vec2(sin(cfT * 1.7 + cfPh * 3.1), cos(cfT * 1.3 + cfPh * 2.3)) * (.1 * cfW + .006);',
+      '  vec3 cfD = vec3(cfG.x, 0., cfG.y) * (' + w.amp.toFixed(3) + ' * cfK);',
+      '  cfD.xz += vec2(sin(cfT * 4.3 + position.y * 7. + cfPh * 5.), cos(cfT * 3.7 + position.x * 9. + cfPh)) * (' + (w.flutter || 0).toFixed(4) + ' * (cfW + .1)) * cfK;',
+      '  transformed += (cfD * cfM) / max(dot(cfM[0], cfM[0]), 1e-4); }'
+    ].join('\n');
+  }
+  // Every surface's material. On the lightest tier (CF.lite, set by buildWorld) surfaces are matte only (Lambert: no
+  // gloss, no sky reflections) and the procedural textures use three octaves of noise instead of five.
+  function std(o) {
+    if (!CF.lite) return new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.92, metalness: 0 }, o || {}));
+    var p = Object.assign({}, o || {}); delete p.roughness; delete p.metalness;
+    return new THREE.MeshLambertMaterial(p);
+  }
 
   // shared uniforms every world material can read (engine updates them)
   CF.U = {
     uTime: { value: 0 }, uEmber: { value: new THREE.Color(0, 0, 0) }, uFirePos: { value: new THREE.Vector3(0, 0.3, 0) },
-    uWet: { value: 0 }
+    uWet: { value: 0 }, uWind: { value: new THREE.Vector3(0, 0, 0) }
   };
 
   // ------------------------------------------------------------------ sky
+  // The sky is drawn in two parts. The slow part (the glow of the air, the Milky Way, drifting cloud, the moon's
+  // halo, the aurora) is painted into small cube maps a face at a time, a second or so ahead, and the picture
+  // cross-fades between them: all of it moves, none of it costs anything per pixel on the screen. The sharp part
+  // (stars, the moon's disc, shooting stars, far lightning) is drawn directly. Stars and the Milky Way turn about
+  // the celestial pole at the true sidereal rate (15 degrees an hour): sit long enough and the sky has moved.
+  var FACE = [
+    'vec3 faceDir(int f, vec2 uv){ float a = uv.x * 2. - 1., b = uv.y * 2. - 1.;',
+    '  if (f == 0) return vec3(1., -b, -a); if (f == 1) return vec3(-1., -b, a); if (f == 2) return vec3(a, 1., b);',
+    '  if (f == 3) return vec3(a, -1., -b); if (f == 4) return vec3(a, -b, 1.); return vec3(-a, -b, -1.); }'
+  ].join('\n');
+  var SLOW_FS = [
+    'precision highp float; precision highp int; in vec2 vUv; out vec4 outColor;',
+    'uniform int uFace; uniform mat3 uRot; uniform vec3 uZenith, uHorizon, uMoonDir, uMoonCol, uMwAxis, uDrift;',
+    'uniform float uMilky, uTime, uMoon, uAurora, uGlow, uCloud, uNoMoon;',
+    CF.GLSL, FACE,
+    'void main(){',
+    '  vec3 d = normalize(faceDir(uFace, vUv)); float h = d.y; vec3 dc = uRot * d;',
+    '  float moonUp = smoothstep(-.06, .12, uMoonDir.y) * step(.001, uMoon);',
+    '  vec3 col = mix(uHorizon, uZenith, pow(clamp(h, 0., 1.), .5)) * mix(uNoMoon, 1., moonUp);',
+    '  float mwb = dot(dc, uMwAxis); float band = exp(-mwb * mwb / .045);',
+    '  float dust = cfFbm(dc * 7.5 + 3.); float clouds = cfFbm(dc * 3.2 + 11.);',
+    '  float core = smoothstep(.3, 1., dot(dc, normalize(vec3(.62, .25, -.74))));',
+    '  float mw = band * (.35 + .9 * clouds) * (1. - .85 * smoothstep(.45, .7, dust) * exp(-mwb * mwb / .006));',
+    '  col += uMilky * mw * mix(vec3(.55, .6, .75), vec3(.95, .82, .62), core * .7) * (.6 + 1.4 * core) * .03 * (1.25 - .25 * moonUp) * smoothstep(-.05, .2, h);',
+    '  float ang = acos(clamp(dot(d, uMoonDir), -1., 1.));',
+    '  col += uMoon * moonUp * vec3(.55, .62, .78) * (exp(-ang * 9.) * .03 + exp(-ang * 45.) * .05) * uGlow;',
+    // cloud: one thin layer overhead, drifting; black against the stars on a moonless night, silver towards a moon
+    '  float cl = 0.;',
+    '  if (uCloud > .002 && h > -.03) {',
+    '    vec2 cp = d.xz / (max(h, 0.) + .22); vec2 dr = uDrift.xz * uTime;',
+    '    float n = cfFbm(vec3(cp * .9 + dr, uTime * .0016)); float big = cfNoise(vec3(cp * .28 + dr * .6, 3.));',
+    '    float cov = uCloud * (.5 + big);',
+    '    cl = smoothstep(.66 - cov * .5, .92 - cov * .42, n) * smoothstep(-.03, .1, h);',
+    '    float toMoon = max(dot(d, uMoonDir), 0.);',
+    '    vec3 lit = uMoonCol * uMoon * moonUp * (.012 + .1 * pow(toMoon, 6.)) * (.45 + .55 * n) + uHorizon * (.5 + .25 * n);',
+    '    col = mix(col, lit, cl * .93); }',
+    // aurora curtains (snow place, some nights)
+    '  if (uAurora > 0. && h > 0.) { float az = atan(d.x, -d.z);',
+    '    float w = cfFbm(vec3(az * 2.2, uTime * .03, 1.)); float curtain = smoothstep(.0, .05, h - .06 - w * .08) * (1. - smoothstep(.12, .55, h - w * .15));',
+    '    float rays = .5 + .5 * cfNoise(vec3(az * 40., h * 2. - uTime * .4, uTime * .1));',
+    '    float lane = smoothstep(.35, .6, cfFbm(vec3(az * 1.3 + uTime * .006, 4., uTime * .02))) * smoothstep(-.6, .4, -d.z);',
+    '    vec3 ac = mix(vec3(.15, 1., .45), vec3(.8, .25, .9), smoothstep(.15, .45, h));',
+    '    col += ac * curtain * rays * lane * uAurora * .05 * (1. - .8 * cl); }',
+    '  outColor = vec4(col, cl); }'
+  ].join('\n');
   var SKY_VS = 'varying vec3 vDir; void main(){ vDir = position; vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.); gl_Position = p.xyww; }';
   var SKY_FS = [
     'varying vec3 vDir;',
-    'uniform vec3 uZenith, uHorizon, uGround, uMoonDir, uMwAxis; uniform float uStars, uMilky, uTime, uMoon, uPhase, uAurora, uGlow;',
-    'uniform vec4 uShootA, uShootB;',
+    'uniform samplerCube tSkyA, tSkyB; uniform mat3 uRot; uniform vec3 uGround, uMoonDir; uniform float uSkyMix, uStars, uTime, uMoon, uPhase;',
+    'uniform vec4 uShootA, uShootB, uFlash;',
     CF.GLSL,
     'vec3 starCol(float t){ return mix(vec3(1., .72, .45), mix(vec3(1., .96, .9), vec3(.75, .85, 1.), smoothstep(.5, 1., t)), smoothstep(0., .5, t)); }',
     'float starLayer(vec3 d, float scale, float thresh, out vec3 col){',
@@ -54,58 +130,115 @@
     '  return exp(-dd * 30.) * m; }',
     'void main(){',
     '  vec3 d = normalize(vDir); float h = d.y;',
-    '  vec3 col = mix(uHorizon, uZenith, pow(clamp(h, 0., 1.), .5));',
-    '  float mwb = dot(d, uMwAxis); float band = exp(-mwb * mwb / .045);',
-    '  float dust = cfFbm(d * 7.5 + 3.); float clouds = cfFbm(d * 3.2 + 11.);',
-    '  float core = smoothstep(.3, 1., dot(d, normalize(vec3(.62, .25, -.74))));',
-    '  float mw = band * (.35 + .9 * clouds) * (1. - .85 * smoothstep(.45, .7, dust) * exp(-mwb * mwb / .006));',
-    '  col += uMilky * mw * mix(vec3(.55, .6, .75), vec3(.95, .82, .62), core * .7) * (.6 + 1.4 * core) * .03;',
-    '  vec3 sc; float s = 0.;',
-    '  s += starLayer(d, 520., .93 - band * .05, sc) * 1.0; vec3 acc = sc * s;',
-    '  float s2 = starLayer(d, 190., .985, sc) * 7.; acc += sc * s2;',
-    '  float s3 = starLayer(d, 70., .993, sc) * 30.; acc += sc * s3;',
-    '  float tw = .65 + .35 * cfNoise(vec3(d.xz * 300., uTime * 3.)); float ext = smoothstep(-.02, .25, h);',
-    '  col += acc * uStars * tw * ext * .1;',
-    // moon: disc with phase + maria, and a halo in the air
-    '  float md = dot(d, uMoonDir); float mr = .9998;',
-    '  if (uMoon > 0.) {',
-    '    float ang = acos(clamp(md, -1., 1.)); col += uMoon * vec3(.55, .62, .78) * (exp(-ang * 9.) * .03 + exp(-ang * 45.) * .05) * uGlow;',
+    '  vec4 slow = mix(textureCube(tSkyA, d), textureCube(tSkyB, d), uSkyMix);',
+    '  vec3 col = slow.rgb; float clear = 1. - slow.a;',
+    '  if (h > -.03 && uStars > 0.) { vec3 dc = uRot * d; vec3 sc;',
+    '    float s = starLayer(dc, 520., .93, sc); vec3 acc = sc * s;',
+    '    float s2 = starLayer(dc, 190., .985, sc) * 7.; acc += sc * s2;',
+    '    float s3 = starLayer(dc, 70., .993, sc) * 30.; acc += sc * s3;',
+    // stars twinkle more the lower they stand (more air to look through)
+    '    float tw = 1. - (.2 + .5 * (1. - smoothstep(0., .6, h))) * cfNoise(vec3(d.xz * 300., uTime * 3.));',
+    '    col += acc * uStars * tw * smoothstep(-.02, .25, h) * clear * clear * .12; }',
+    // the moon: a disc with its phase and maria, dimmed by cloud in front of it
+    '  if (uMoon > 0.) { float ang = acos(clamp(dot(d, uMoonDir), -1., 1.));',
     '    if (ang < .012) { vec3 t1 = normalize(cross(uMoonDir, vec3(0., 1., 0.))), t2 = cross(t1, uMoonDir);',
     '      vec2 q = vec2(dot(d - uMoonDir, t1), dot(d - uMoonDir, t2)) / .012; float z = sqrt(max(0., 1. - dot(q, q)));',
     '      vec3 n = vec3(q, z); float lit = smoothstep(-.05, .1, dot(n, normalize(vec3(cos(uPhase), 0., sin(uPhase)))));',
     '      float maria = .75 + .25 * smoothstep(.4, .65, cfFbm(vec3(q * 3., 2.)));',
-    '      col = mix(col, vec3(1., .98, .92) * 2.2 * uMoon * maria * (.03 + lit), smoothstep(1., .92, length(q))); } }',
-    // aurora curtains (snow place, some nights)
-    '  if (uAurora > 0. && h > 0.) { float az = atan(d.x, -d.z);',
-    '    float w = cfFbm(vec3(az * 2.2, uTime * .03, 1.)) ; float curtain = smoothstep(.0, .05, h - .06 - w * .08) * (1. - smoothstep(.12, .55, h - w * .15));',
-    '    float rays = .5 + .5 * cfNoise(vec3(az * 40., h * 2. - uTime * .4, uTime * .1));',
-    '    float lane = smoothstep(.35, .6, cfFbm(vec3(az * 1.3 + uTime * .006, 4., uTime * .02))) * smoothstep(-.6, .4, -d.z);',
-    '    vec3 ac = mix(vec3(.15, 1., .45), vec3(.8, .25, .9), smoothstep(.15, .45, h));',
-    '    col += ac * curtain * rays * lane * uAurora * .05; }',
+    '      col = mix(col, vec3(1., .98, .92) * 2.2 * uMoon * maria * (.03 + lit) * (1. - .8 * slow.a), smoothstep(1., .92, length(q))); } }',
     // shooting star: a short streak along a great circle
     '  if (uShootB.w > 0.) { vec3 a = uShootA.xyz, b = uShootB.xyz; vec3 n = normalize(cross(a, b)); float off = abs(dot(d, n));',
     '    float t = atan(dot(d, cross(n, a)), dot(d, a)) / max(acos(dot(a, b)), 1e-3); float head = uShootA.w;',
     '    float tail = smoothstep(head - .35, head, t) * step(t, head) * step(0., t);',
-    '    col += vec3(.9, .95, 1.) * exp(-off * off * 4e6) * tail * uShootB.w * 1.6; }',
+    '    col += vec3(.9, .95, 1.) * exp(-off * off * 4e6) * tail * uShootB.w * 1.6 * clear; }',
+    // lightning far beyond the horizon: the sky above it blinks, and cloud catches it
+    '  if (uFlash.w > 0.) { float along = max(dot(normalize(d.xz + 1e-5), normalize(uFlash.xz)), 0.);',
+    '    col += vec3(.55, .6, .85) * uFlash.w * pow(along, 5.) * exp(-max(h, 0.) * (9. - 6. * slow.a)) * (.35 + slow.a); }',
     '  col = mix(uGround, col, smoothstep(-.06, .01, h));',
     '  gl_FragColor = vec4(col, 1.); }'
   ].join('\n');
 
-  function makeSky(o) {
-    var mat = new THREE.ShaderMaterial({
-      vertexShader: SKY_VS, fragmentShader: SKY_FS, side: THREE.BackSide, depthWrite: false,
+  var SIDEREAL = 2 * Math.PI / 86164;   // radians a second
+  function Sky(renderer, P, quality) {
+    var o = P.sky, size = quality === 'lite' ? 128 : 256, self = this;
+    this.r = renderer; this.def = o;
+    var lat = (P.lat || 50) * Math.PI / 180;
+    this.pole = new THREE.Vector3(0, Math.sin(lat), -Math.cos(lat));      // north is -z
+    this.moon0 = new THREE.Vector3().fromArray(o.moonDir || [0, 1, 0]).normalize();
+    this.moonDir = this.moon0.clone(); this.m4 = new THREE.Matrix4();
+    this.cubes = [0, 1, 2].map(function () {
+      var c = new THREE.WebGLCubeRenderTarget(size, { type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false,
+        generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+      return c;
+    });
+    this.slow = new THREE.RawShaderMaterial({
+      glslVersion: THREE.GLSL3, vertexShader: CF.VERT_FS, fragmentShader: SLOW_FS, depthTest: false, depthWrite: false,
       uniforms: {
-        uZenith: { value: new THREE.Color().fromArray(o.zenith) }, uHorizon: { value: new THREE.Color().fromArray(o.horizon) },
-        uGround: { value: new THREE.Color().fromArray(o.ground) }, uMoonDir: { value: new THREE.Vector3().fromArray(o.moonDir || [0, 1, 0]).normalize() },
-        uMwAxis: { value: new THREE.Vector3().fromArray(o.mwAxis || [0.35, 0.45, 0.82]).normalize() },
-        uStars: { value: o.stars }, uMilky: { value: o.milky }, uTime: CF.U.uTime, uMoon: { value: o.moon || 0 }, uPhase: { value: o.phase || 0 },
-        uAurora: { value: 0 }, uGlow: { value: 1 }, uShootA: { value: new THREE.Vector4(0, 0, -1, 0) }, uShootB: { value: new THREE.Vector4(0, 0, -1, 0) }
+        uFace: { value: 0 }, uRot: { value: new THREE.Matrix3() }, uZenith: { value: new THREE.Color().fromArray(o.zenith) },
+        uHorizon: { value: new THREE.Color().fromArray(o.horizon) }, uMoonDir: { value: this.moonDir.clone() },
+        uMoonCol: { value: new THREE.Color().fromArray(P.moon.color) }, uMwAxis: { value: new THREE.Vector3().fromArray(o.mwAxis || [0.35, 0.45, 0.82]).normalize() },
+        uDrift: { value: new THREE.Vector3(0.006, 0, 0.003) }, uMilky: { value: o.milky }, uTime: { value: 0 }, uMoon: { value: o.moon || 0 },
+        uAurora: { value: 0 }, uGlow: { value: 1 }, uCloud: { value: 0 }, uNoMoon: { value: o.moon ? 0.5 : 1 }
       }
     });
-    var m = new THREE.Mesh(new THREE.SphereGeometry(500, 48, 24), mat);
-    m.frustumCulled = false; m.renderOrder = -10;
-    return m;
+    this.scene = new THREE.Scene(); this.cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    var quad = new THREE.Mesh(CF.fullscreenTriangle(), this.slow); quad.frustumCulled = false; this.scene.add(quad);
+    this.mat = new THREE.ShaderMaterial({
+      vertexShader: SKY_VS, fragmentShader: SKY_FS, side: THREE.BackSide, depthWrite: false,
+      uniforms: {
+        tSkyA: { value: this.cubes[0].texture }, tSkyB: { value: this.cubes[1].texture }, uSkyMix: { value: 0 }, uRot: { value: new THREE.Matrix3() },
+        uGround: { value: new THREE.Color().fromArray(o.ground) }, uMoonDir: { value: this.moonDir.clone() },
+        uStars: { value: o.stars }, uTime: CF.U.uTime, uMoon: { value: o.moon || 0 }, uPhase: { value: o.phase || 0 },
+        uShootA: { value: new THREE.Vector4(0, 0, -1, 0) }, uShootB: { value: new THREE.Vector4(0, 0, -1, 0) }, uFlash: { value: new THREE.Vector4(1, 0, 0, 0) }
+      }
+    });
+    this.mesh = new THREE.Mesh(new THREE.SphereGeometry(500, 32, 16), this.mat);
+    this.mesh.frustumCulled = false; this.mesh.renderOrder = 1000;      // after everything solid: only the sky you can see is shaded
+    this.cloud = P.cloud || 0; this.aurora = 0; this.span = 2;
+    this.tA = 0; this.face = 0; this.filled = false;
+    this.dispose = function () { self.cubes.forEach(function (c) { c.dispose(); }); self.slow.dispose(); self.mat.dispose(); self.mesh.geometry.dispose(); quad.geometry.dispose(); };
   }
+  Sky.prototype.rotation = function (time, into) {   // world -> celestial at `time`; also moves the moon
+    this.m4.makeRotationAxis(this.pole, SIDEREAL * time);
+    into.setFromMatrix4(this.m4);
+    return into;
+  };
+  Sky.prototype.moonAt = function (time, into) {
+    this.m4.makeRotationAxis(this.pole, -SIDEREAL * time);
+    return into.copy(this.moon0).applyMatrix4(this.m4);
+  };
+  Sky.prototype.paint = function (cube, face, time) {
+    var u = this.slow.uniforms, r = this.r, prev = r.getRenderTarget();
+    u.uFace.value = face; u.uTime.value = time; u.uCloud.value = this.cloud; u.uAurora.value = this.aurora;
+    this.rotation(time, u.uRot.value); this.moonAt(time, u.uMoonDir.value);
+    r.setRenderTarget(cube, face); r.render(this.scene, this.cam);
+    r.setRenderTarget(prev);
+  };
+  Sky.prototype.fill = function (time) {
+    for (var k = 0; k < 3; k++) for (var f = 0; f < 6; f++) this.paint(this.cubes[k], f, time + k * this.span);
+    this.tA = time; this.face = 0; this.filled = true;
+    this.show(time);
+  };
+  Sky.prototype.show = function (time) {
+    var u = this.mat.uniforms;
+    u.tSkyA.value = this.cubes[0].texture; u.tSkyB.value = this.cubes[1].texture;
+    u.uSkyMix.value = CF.clamp((time - this.tA) / this.span, 0, 1);
+    this.rotation(time, u.uRot.value); this.moonAt(time, this.moonDir); u.uMoonDir.value.copy(this.moonDir);
+  };
+  // every frame: `time` is the fire's clock; paints one face of the cube after next now and then
+  Sky.prototype.update = function (time) {
+    if (!this.filled || time < this.tA || time > this.tA + this.span * 3) { this.fill(time); return; }
+    this.span = this.aurora > 0 ? 0.8 : 2;
+    while (time >= this.tA + this.span) {            // the cube after next becomes the next one
+      while (this.face < 6) this.paint(this.cubes[2], this.face++, this.tA + 2 * this.span);
+      var c = this.cubes; c.push(c.shift()); this.tA += this.span; this.face = 0;
+    }
+    // keep pace: face k must be done by the time (k+1)/6 of the span has passed
+    var due = Math.min(6, Math.ceil((time - this.tA) / this.span * 6 + 0.001));
+    if (this.face < due) this.paint(this.cubes[2], this.face++, this.tA + 2 * this.span);
+    this.show(time);
+  };
+  CF.Sky = Sky;
 
   // ------------------------------------------------------------------ ground (polar grid: fine near the fire)
   function groundGeo(height) {
@@ -173,6 +306,33 @@
       'glow = uEmber * exp(-r * r / .05) * smoothstep(.45, .8, cfNoise(vec3(vWP.xz * 18., uTime * .3)));'
     ].join('\n')
   };
+
+  // On the lightest tier the ground's pattern is painted once into a texture (colour + height, 16 m across, seen
+  // from above) and looked up from then on: one texture read a pixel instead of a dozen noise evaluations.
+  var BAKE_R = 8;
+  function bakeGround(renderer, place, geo) {
+    var size = 1024, rt = new THREE.WebGLRenderTarget(size, size, { depthBuffer: false, generateMipmaps: true,
+      minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping });
+    var mat = new THREE.ShaderMaterial({
+      uniforms: { uEmber: { value: new THREE.Color(0, 0, 0) }, uTime: { value: 0 } },
+      vertexShader: 'varying vec3 vWP; void main(){ vWP = position; gl_Position = vec4(position.x / ' + BAKE_R.toFixed(1) + ', position.z / ' + BAKE_R.toFixed(1) + ', 0., 1.); }',
+      fragmentShader: 'varying vec3 vWP; uniform vec3 uEmber; uniform float uTime;\n' + CF.GLSL +
+        '\nvoid main(){ vec3 col = vec3(0.); float h = 0.; float rough = -1.; vec3 glow = vec3(0.);\n' + GROUND[place] +
+        '\n gl_FragColor = vec4(sqrt(clamp(col, 0., 1.)), clamp(h / 2.5, 0., 1.)); }',   // square root: dark colours keep their steps in 8 bits
+      depthTest: false, depthWrite: false, side: THREE.DoubleSide
+    });
+    var mesh = new THREE.Mesh(geo, mat), sc = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), prev = renderer.getRenderTarget();
+    mesh.frustumCulled = false; sc.add(mesh);
+    renderer.setRenderTarget(rt); renderer.render(sc, cam); renderer.setRenderTarget(prev);
+    mat.dispose();
+    return rt;
+  }
+  var GROUND_BAKED = [
+    'float r = length(vWP.xz); vec4 bk = texture2D(tGround, vWP.xz / ' + (2 * BAKE_R).toFixed(1) + ' + .5);',
+    'col = mix(bk.rgb * bk.rgb, mix(uFarCol, uFarLow, smoothstep(-.02, -.09, vWP.y)), smoothstep(' + (BAKE_R * 0.8).toFixed(1) + ', ' + BAKE_R.toFixed(1) + ', max(abs(vWP.x), abs(vWP.z))));',
+    'h = bk.a * 2.5;',
+    'glow = uEmber * exp(-r * r / .05) * smoothstep(.45, .8, cfNoise(vec3(vWP.xz * 18., uTime * .3)));'
+  ].join('\n');
 
   // ------------------------------------------------------------------ stones, rocks
   var ROCK = [
@@ -316,13 +476,14 @@
     branch(geoms, end, cont, len * 0.7, rad * 0.62, depth - 1, rng, opt);
   }
 
-  function spruceGeo(seed, height) {
+  // far = a lighter copy of the same tree for the ones you only ever see as silhouettes
+  function spruceGeo(seed, height, far) {
     var rng = CF.fixedRng(seed), geoms = [], H = height, tiers = Math.round(H * 1.6);
     var trunk = new THREE.CylinderGeometry(0.05, 0.16, H, 7, 1, true); trunk.translate(0, H / 2, 0);
     geoms.push(CF.tint(trunk, 0.09, 0.06, 0.045));
     for (var i = 0; i < tiers; i++) {
       var t = i / tiers, y = 0.9 + t * (H - 1.1), rad = (1 - t) * (0.25 * H) * rng.range(0.85, 1.12) + 0.12, hh = (H / tiers) * 1.9;
-      var c = new THREE.ConeGeometry(rad, hh, 11, 3, true);
+      var c = new THREE.ConeGeometry(rad, hh, far ? 7 : 11, far ? 1 : 3, true);
       var p = c.attributes.position;
       for (var k = 0; k < p.count; k++) {
         var x = p.getX(k), yy = p.getY(k), z = p.getZ(k), a = Math.atan2(z, x), d = Math.hypot(x, z);
@@ -332,7 +493,7 @@
       c.computeVertexNormals();
       c.translate(rng.gauss() * 0.04, y, rng.gauss() * 0.04);
       var shade = rng.range(0.8, 1.15);
-      geoms.push(CF.tint(c, 0.035 * shade, 0.055 * shade, 0.035 * shade));
+      geoms.push(CF.tint(c, 0.06 * shade, 0.085 * shade, 0.055 * shade));
     }
     return CF.merge(geoms);
   }
@@ -342,8 +503,9 @@
     'col = mix(col, vec3(.8, .84, .9), uSnowCap * smoothstep(.2, .55, vON.y + n * .3 - .2) * step(.2, vOP.y));',
     'h = n; rough = .9;'
   ].join('\n');
-  function needleMat(snowCap) {
-    return CF.patch(std({ vertexColors: true, side: THREE.DoubleSide }), { key: 'needle' + snowCap, albedo: NEEDLES, bump: 0.02,
+  function needleMat(snowCap, sway, amp, h) {
+    return CF.patch(std({ vertexColors: true, side: THREE.DoubleSide }), { key: 'needle' + snowCap + (sway ? 'w' + (amp || '') : ''), albedo: NEEDLES, bump: 0.02,
+      sway: sway ? { amp: amp || 0.2, h: h || 12, flutter: 0.012 } : null,
       uniforms: { uSnowCap: { value: snowCap } }, decl: 'uniform float uSnowCap;' });
   }
   var BARK = [
@@ -353,8 +515,9 @@
     'col = mix(col, vec3(.8, .84, .9), uSnowCap * smoothstep(.55, .9, vON.y + n * .2));',
     'h = n; rough = .9;'
   ].join('\n');
-  function barkMat(birch, snowCap) {
-    return CF.patch(std({ vertexColors: true }), { key: 'bark' + birch + snowCap, albedo: BARK, bump: 0.01,
+  function barkMat(birch, snowCap, sway) {
+    return CF.patch(std({ vertexColors: true }), { key: 'bark' + birch + snowCap + (sway ? 'w' : ''), albedo: BARK, bump: 0.01,
+      sway: sway ? { amp: 0.16, h: 8, flutter: 0.02 } : null,
       uniforms: { uBirch: { value: birch }, uSnowCap: { value: snowCap } }, decl: 'uniform float uBirch, uSnowCap;' });
   }
   function birchGeo(seed, H) {
@@ -475,14 +638,16 @@
     forest: {
       name: 'Boreal midnight', sky: { zenith: [0.0035, 0.005, 0.011], horizon: [0.014, 0.018, 0.028], ground: [0.002, 0.002, 0.002], stars: 1.0, milky: 1.0, moon: 0, mwAxis: [0.4, 0.3, 0.86] },
       fog: [0.0035, 0.0045, 0.0075], fogDensity: 0.045, moon: { color: [0.55, 0.62, 0.85], intensity: 0.012, dir: [-0.4, 0.8, -0.3] }, hemi: [0.012, 0.004],
-      motes: 'fireflies', exposure: 1.0, smokeAmb: [0.004, 0.005, 0.008],
+      motes: 'fireflies', exposure: 1.0, smokeAmb: [0.004, 0.005, 0.008], lat: 54, cloud: 0.2, moths: true, farGround: [0.06, 0.05, 0.03],
+      mist: { n: 11, r0: 5.5, r1: 17, y0: 0.25, y1: 1.0, size0: 2.6, size1: 5.5, color: [0.02, 0.024, 0.032], dens: 0.2, fire: 1 },
       woods: ['pine', 'birch', 'maple'],
       height: function (x, z) { var r = Math.hypot(x, z); return CF.smooth(4, 14, r) * (CF.noise3(x * 0.08, z * 0.08, 1) * 0.9 + 0.3); }
     },
     snow: {
       name: 'Lakeshore, first snow', sky: { zenith: [0.006, 0.01, 0.022], horizon: [0.024, 0.032, 0.05], ground: [0.004, 0.005, 0.007], stars: 0.75, milky: 0.45, moon: 1, phase: 1.4, moonDir: [0.55, 0.3, -0.78], mwAxis: [0.3, 0.55, 0.78] },
       fog: [0.009, 0.012, 0.02], fogDensity: 0.022, moon: { color: [0.62, 0.72, 0.95], intensity: 0.07, dir: [0.55, 0.3, -0.78] }, hemi: [0.02, 0.012],
-      motes: 'snow', exposure: 0.42, smokeAmb: [0.01, 0.012, 0.02], aurora: 0.45,
+      motes: 'snow', exposure: 0.42, smokeAmb: [0.028, 0.033, 0.046], aurora: 0.45, lat: 50, cloud: 0.3, breath: true, farGround: [0.5, 0.53, 0.58], farLow: [0.16, 0.18, 0.21],
+      mist: { n: 9, lake: true, y0: 0.3, y1: 1.3, size0: 5, size1: 10, color: [0.05, 0.06, 0.085], dens: 0.16, fire: 0.5 },
       woods: ['birch', 'spruce', 'ash'],
       height: function (x, z) {
         var shore = -7 - CF.noise3(x * 0.07, 0, 3) * 3 - Math.abs(x) * 0.05;
@@ -493,7 +658,7 @@
     desert: {
       name: 'Desert canyon', sky: { zenith: [0.0026, 0.003, 0.0072], horizon: [0.016, 0.014, 0.018], ground: [0.003, 0.002, 0.002], stars: 1.35, milky: 1.6, moon: 0.6, phase: 0.2, moonDir: [-0.82, 0.13, -0.56], mwAxis: [0.25, 0.25, 0.94] },
       fog: [0.004, 0.0038, 0.0045], fogDensity: 0.011, moon: { color: [0.75, 0.7, 0.62], intensity: 0.02, dir: [-0.82, 0.22, -0.56] }, hemi: [0.01, 0.006],
-      motes: 'none', exposure: 0.8, smokeAmb: [0.005, 0.005, 0.006],
+      motes: 'dust', exposure: 0.8, smokeAmb: [0.005, 0.005, 0.006], lat: 36, cloud: 0.05, lightning: [0.55, 0, -0.83], farGround: [0.36, 0.23, 0.14],
       woods: ['mesquite', 'juniper', 'pinon'],
       height: function (x, z) { var r = Math.hypot(x, z); return CF.smooth(5, 25, r) * (CF.noise3(x * 0.04, z * 0.04, 5) * 1.6 + 0.4) + CF.smooth(20, 40, r) * 1.5; }
     }
@@ -501,13 +666,16 @@
 
   CF.buildWorld = function (place, renderer, quality) {
     var P = CF.PLACES[place] || CF.PLACES.forest, scene = new THREE.Scene(), W = { scene: scene, place: place, def: P, casters: [] };
-    var sky = makeSky(P.sky); scene.add(sky); W.sky = sky;
+    CF.lite = quality === 'lite';
+    var skyCtl = new CF.Sky(renderer, P, quality); skyCtl.fill(CF.U.uTime.value);
+    scene.add(skyCtl.mesh); W.sky = skyCtl.mesh; W.skyCtl = skyCtl;
     W.fog = new THREE.FogExp2(new THREE.Color().fromArray(P.fog), P.fogDensity); scene.fog = W.fog;
-    // environment reflections from the sky
-    try {
-      var pm = new THREE.PMREMGenerator(renderer), es = new THREE.Scene(), s2 = makeSky(P.sky);
-      s2.material.uniforms.uStars.value *= 0.5; es.add(s2);
+    // environment reflections from the sky (not on the lightest tier: matte surfaces have none)
+    if (CF.lite) W.env = null; else try {
+      var pm = new THREE.PMREMGenerator(renderer), es = new THREE.Scene(), s2 = new THREE.Mesh(skyCtl.mesh.geometry, skyCtl.mat);
+      skyCtl.mat.uniforms.uStars.value *= 0.5; es.add(s2);
       W.env = pm.fromScene(es, 0.02, 0.1, 1000).texture; pm.dispose();
+      skyCtl.mat.uniforms.uStars.value = P.sky.stars;
       scene.environment = W.env;
     } catch (e) { W.env = null; }
     // lights: moon/starlight + sky
@@ -515,25 +683,32 @@
     moon.position.fromArray(P.moon.dir).multiplyScalar(40); scene.add(moon); W.moon = moon;
     var hemi = new THREE.HemisphereLight(new THREE.Color(0.5, 0.6, 1.0), new THREE.Color(0.3, 0.25, 0.2), P.hemi[0] * 10); scene.add(hemi); W.hemi = hemi;
     // ground
-    var gmat = CF.patch(std(), { key: 'ground-' + place, albedo: GROUND[place], bump: 0.01, uniforms: { uEmber: CF.U.uEmber, uTime: CF.U.uTime }, decl: 'uniform vec3 uEmber; uniform float uTime;' });
+    var ggeo = groundGeo(P.height), gmat;
+    if (CF.lite) {
+      W.groundTex = bakeGround(renderer, place, ggeo);
+      gmat = CF.patch(std(), { key: 'ground-baked', albedo: GROUND_BAKED, bump: 0.01, decl: 'uniform vec3 uEmber, uFarCol, uFarLow; uniform float uTime; uniform sampler2D tGround;',
+        uniforms: { uEmber: CF.U.uEmber, uTime: CF.U.uTime, tGround: { value: W.groundTex.texture }, uFarCol: { value: new THREE.Color().fromArray(P.farGround) },
+                    uFarLow: { value: new THREE.Color().fromArray(P.farLow || P.farGround) } } });
+    } else gmat = CF.patch(std(), { key: 'ground-' + place, albedo: GROUND[place], bump: 0.01, uniforms: { uEmber: CF.U.uEmber, uTime: CF.U.uTime }, decl: 'uniform vec3 uEmber; uniform float uTime;' });
     if (W.env) gmat.envMapIntensity = place === 'snow' ? 1.0 : 0.4;
-    var ground = new THREE.Mesh(groundGeo(P.height), gmat); ground.receiveShadow = true; scene.add(ground); W.ground = ground;
+    var ground = new THREE.Mesh(ggeo, gmat); ground.receiveShadow = true; scene.add(ground); W.ground = ground;
     W.height = P.height;
     // stone ring
     var stoneM = rockMat(place === 'desert' ? [0.2, 0.13, 0.09] : [0.13, 0.13, 0.125], [0.03, 0.05, 0.02], place === 'forest' ? 0.8 : 0, place === 'snow' ? 1 : 0);
     var ringR = CF.fixedRng(place.length * 7);
-    var nst = 14;
-    for (var i = 0; i < nst; i++) {
+    var nst = 14, ring = [];
+    for (var i = 0; i < nst; i++) {   // one mesh for the whole ring
       var a = i / nst * Math.PI * 2 + ringR.gauss() * 0.05, rr = 0.66 + ringR.gauss() * 0.03, sz = ringR.range(0.09, 0.14);
-      var st = new THREE.Mesh(rock(sz, i * 3 + 1, 0.75), stoneM);
-      st.position.set(Math.cos(a) * rr, sz * 0.35, Math.sin(a) * rr); st.rotation.y = ringR.range(0, 6.28);
-      st.castShadow = st.receiveShadow = true; scene.add(st); W.casters.push(st);
+      var sg = rock(sz, i * 3 + 1, 0.75);
+      sg.rotateY(ringR.range(0, 6.28)); sg.translate(Math.cos(a) * rr, sz * 0.35, Math.sin(a) * rr);
+      ring.push(sg);
     }
+    var stones = new THREE.Mesh(CF.merge(ring), stoneM); stones.castShadow = stones.receiveShadow = true; scene.add(stones); W.casters.push(stones);
     // coals
     var coalU = { uCoalHeat: { value: 0 }, uCoalCol: { value: new THREE.Color(1, 0.3, 0.05) }, uTime: CF.U.uTime };
     var coalM = CF.patch(std(), { key: 'coal', albedo: COAL, bump: 0.01, uniforms: coalU, decl: 'uniform float uCoalHeat; uniform vec3 uCoalCol; uniform float uTime;' });
     var coalG = new THREE.IcosahedronGeometry(1, 1); CF.lumpy(coalG, 0.35, 1.7, 3);
-    var NC = quality === 'low' ? 60 : 110, coals = new THREE.InstancedMesh(coalG, coalM, NC), mtx = new THREE.Matrix4(), cr = CF.fixedRng(5);
+    var NC = quality === 'low' || quality === 'lite' ? 60 : 110, coals = new THREE.InstancedMesh(coalG, coalM, NC), mtx = new THREE.Matrix4(), cr = CF.fixedRng(5);
     W.coalBase = [];
     for (i = 0; i < NC; i++) {
       var ca = cr.range(0, 6.28), cd = Math.sqrt(cr.next()) * 0.36, cs = cr.range(0.018, 0.045);
@@ -543,47 +718,66 @@
       coals.setMatrixAt(i, mtx);
     }
     coals.receiveShadow = true; scene.add(coals); W.coals = coals; W.coalU = coalU;
-    // place-specific scenery
+    // place-specific scenery. Trees and shrubs of one shape are drawn together (instancing): one draw call per
+    // shape instead of one per tree. list items: [x, y, z, turn, sx, sy, sz]
     var trees = [], tr = CF.fixedRng(place.length * 31 + 2);
     function okSpot(x, z) {
       if (Math.hypot(x, z) < 5.5) return false;
       if (Math.hypot(x - 0, z - 4.2) < 4 && z > 0) return false;           // keep the view from the seat open
       return true;
     }
+    var _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3();
+    function plant(geo, mat, list, cast) {
+      if (!list.length) return null;
+      list.sort(function (a, b) { return (a[0] * a[0] + a[2] * a[2]) - (b[0] * b[0] + b[2] * b[2]); });   // nearest first: they hide the rest before it is shaded
+      var im = new THREE.InstancedMesh(geo, mat, list.length);
+      for (var k = 0; k < list.length; k++) {
+        var t = list[k]; _e.set(0, t[3], 0); _q.setFromEuler(_e); _p.set(t[0], t[1], t[2]); _s.set(t[4], t[5], t[6]);
+        _m.compose(_p, _q, _s); im.setMatrixAt(k, _m);
+      }
+      im.instanceMatrix.needsUpdate = true; im.castShadow = !!cast; im.frustumCulled = false;
+      scene.add(im); trees.push(im); if (cast) W.casters.push(im);
+      return im;
+    }
+    function groups(n) { var g = []; for (var k = 0; k < n; k++) g.push({ near: [], far: [] }); return g; }
     if (place === 'forest') {
-      var nm = needleMat(0), bm = barkMat(0, 0);
-      var variants = [0, 1, 2, 3].map(function (k) { return spruceGeo(100 + k, 9 + k * 1.6); });
+      var nm = needleMat(0, true), bm = barkMat(0, 0);
+      var variants = [0, 1, 2, 3].map(function (k) { return spruceGeo(100 + k, 9 + k * 1.6); }), fg = groups(4);
+      var variantsFar = [0, 1, 2, 3].map(function (k) { return spruceGeo(100 + k, 9 + k * 1.6, true); });
       for (i = 0; i < 95; i++) {
         var ta = tr.range(0, 6.28), td = 6 + Math.pow(tr.next(), 0.7) * 34, tx = Math.cos(ta) * td, tz = Math.sin(ta) * td;
         if (!okSpot(tx, tz)) continue;
-        var t = new THREE.Mesh(variants[i % 4], nm);
-        t.position.set(tx, P.height(tx, tz) - 0.1, tz); t.rotation.y = tr.range(0, 6.28); var sc = tr.range(0.75, 1.3); t.scale.set(sc, sc * tr.range(0.9, 1.15), sc);
-        scene.add(t); trees.push(t); if (td < 11) { t.castShadow = true; W.casters.push(t); }
+        var ry = tr.range(0, 6.28), sc = tr.range(0.75, 1.3), sy = sc * tr.range(0.9, 1.15);
+        fg[i % 4][td < 12 ? 'near' : 'far'].push([tx, P.height(tx, tz) - 0.1, tz, ry, sc, sy, sc]);
       }
+      fg.forEach(function (g, k) { plant(variants[k], nm, g.near, true); plant(variantsFar[k], nm, g.far, false); });
       var tent = new THREE.Mesh(tentGeo(), canvasMat(0)); tent.position.set(-3.3, 0, -2.0); tent.rotation.y = -0.55;
       tent.castShadow = tent.receiveShadow = true; scene.add(tent); W.casters.push(tent);
       var stump = new THREE.Mesh(stumpAxeGeo(), barkMat(0, 0)); stump.position.set(2.3, 0, -1.4); stump.rotation.y = 2.2; stump.castShadow = true; scene.add(stump); W.casters.push(stump);
       var b1 = new THREE.Mesh(rock(0.6, 41, 0.6), rockMat([0.12, 0.12, 0.12], [0.03, 0.05, 0.02], 1, 0)); b1.position.set(4.2, 0.1, 1.2); b1.castShadow = true; scene.add(b1);
       W.wood = { x: 2.1, z: 1.8 };
     } else if (place === 'snow') {
-      var bmat = barkMat(1, 1), nmat = needleMat(1);
+      var bmat = barkMat(1, 1, true), nmat = needleMat(1, true);
       var bv = [0, 1, 2].map(function (k) { return birchGeo(300 + k, 7 + k); });
-      var sv = [0, 1].map(function (k) { return spruceGeo(200 + k, 8 + k * 2); });
+      var sv = [0, 1].map(function (k) { return spruceGeo(200 + k, 8 + k * 2); }), bg = groups(3), sg2 = groups(2);
+      var svFar = [0, 1].map(function (k) { return spruceGeo(200 + k, 8 + k * 2, true); });
       for (i = 0; i < 80; i++) {
         ta = tr.range(-0.1, 3.3); td = 6 + Math.pow(tr.next(), 0.7) * 30; tx = Math.cos(ta) * td; tz = Math.sin(ta) * td * 0.9 + 1;
         if (!okSpot(tx, tz) || P.height(tx, tz) < -0.05) continue;
         var isB = tr.chance(0.6);
-        t = new THREE.Mesh(isB ? bv[i % 3] : sv[i % 2], isB ? bmat : nmat);
-        t.position.set(tx, P.height(tx, tz) - 0.1, tz); t.rotation.y = tr.range(0, 6.28); sc = tr.range(0.8, 1.25); t.scale.set(sc, sc, sc);
-        scene.add(t); trees.push(t); if (td < 11) { t.castShadow = true; W.casters.push(t); }
+        ry = tr.range(0, 6.28); sc = tr.range(0.8, 1.25);
+        (isB ? bg[i % 3] : sg2[i % 2])[td < 11 ? 'near' : 'far'].push([tx, P.height(tx, tz) - 0.1, tz, ry, sc, sc, sc]);
       }
+      bg.forEach(function (g, k) { plant(bv[k], bmat, g.near, true); plant(bv[k], bmat, g.far, false); });
+      sg2.forEach(function (g, k) { plant(sv[k], nmat, g.near, true); plant(svFar[k], nmat, g.far, false); });
       var canoe = new THREE.Mesh(canoeGeo(), canvasMat(1)); canoe.position.set(-4.2, 0.0, -1.0); canoe.rotation.y = 0.25; canoe.scale.setScalar(0.85); canoe.castShadow = canoe.receiveShadow = true; scene.add(canoe); W.casters.push(canoe);
       // the far shore: a dark treeline across the ice
-      var farG = [0, 1, 2].map(function (k) { return spruceGeo(400 + k, 10 + k * 2); });
+      var farG = [0, 1, 2].map(function (k) { return spruceGeo(400 + k, 10 + k * 2, true); }), shore = [[], [], []];
       for (i = 0; i < 70; i++) {
-        var fx = tr.range(-110, 110), fz = -48 - tr.range(0, 18) - Math.abs(fx) * 0.1;
-        var ft = new THREE.Mesh(farG[i % 3], nmat); ft.position.set(fx, -0.2, fz); var fs = tr.range(1.0, 1.7); ft.scale.set(fs, fs * tr.range(0.9, 1.3), fs); scene.add(ft);
+        var fx = tr.range(-110, 110), fz = -48 - tr.range(0, 18) - Math.abs(fx) * 0.1, fs = tr.range(1.0, 1.7);
+        shore[i % 3].push([fx, -0.2, fz, 0, fs, fs * tr.range(0.9, 1.3), fs]);
       }
+      shore.forEach(function (list, k) { plant(farG[k], nmat, list, false); });
       var bs = new THREE.Mesh(rock(0.5, 51, 0.55), rockMat([0.11, 0.11, 0.12], [0, 0, 0], 0, 1)); bs.position.set(3.6, 0.05, -2.2); bs.castShadow = true; scene.add(bs);
       W.wood = { x: 2.2, z: 1.6 };
     } else {
@@ -595,16 +789,21 @@
         m.castShadow = m.receiveShadow = true; scene.add(m); if (Math.hypot(b[0], b[1]) < 9) W.casters.push(m);
       });
       var snag = new THREE.Mesh(snagGeo(9), barkMat(0, 0)); snag.position.set(-3.2, 0, -2.6); snag.scale.setScalar(1.3); snag.castShadow = true; scene.add(snag); W.casters.push(snag);
-      var shrubM = needleMat(0);
+      var shrubM = needleMat(0, true, 0.6, 0.05), shrubG = [0, 1, 2, 3].map(function (k) {
+        var g = new THREE.IcosahedronGeometry(1, 2); CF.lumpy(g, 0.4, 2, k * 7); return CF.tint(g, 0.07, 0.07, 0.045);
+      }), shrubs = [[], [], [], []];
       for (i = 0; i < 40; i++) {
         ta = tr.range(0, 6.28); td = 4 + tr.next() * 30; tx = Math.cos(ta) * td; tz = Math.sin(ta) * td;
         if (!okSpot(tx, tz)) continue;
-        var sg = new THREE.IcosahedronGeometry(1, 2); CF.lumpy(sg, 0.4, 2, i); CF.tint(sg, 0.07, 0.07, 0.045);
-        var sh = new THREE.Mesh(sg, shrubM); var ss = tr.range(0.2, 0.5); sh.scale.set(ss * 1.3, ss * 0.7, ss * 1.2); sh.position.set(tx, P.height(tx, tz) + ss * 0.2, tz); scene.add(sh);
+        var ss = tr.range(0.2, 0.5);
+        shrubs[i % 4].push([tx, P.height(tx, tz) + ss * 0.2, tz, i * 1.7, ss * 1.3, ss * 0.7, ss * 1.2]);
       }
+      shrubs.forEach(function (list, k) { plant(shrubG[k], shrubM, list, false); });
       var roll = new THREE.Mesh(bedrollGeo(), canvasMat(0)); roll.position.set(-2.9, 0, -1.9);   // clear of the seats people sit on (cf-people.js)
       roll.rotation.y = 0.9; roll.castShadow = true; scene.add(roll); W.casters.push(roll);
       var pot = new THREE.Mesh(potGeo(), std({ vertexColors: true, roughness: 0.55, metalness: 0.6 })); pot.position.set(0.68, 0.11, 0.28); pot.rotation.y = 2; pot.castShadow = true; scene.add(pot); W.casters.push(pot);
+      // where the pot's spout ends (steam rises from it when the fire is hot: cf-engine.js)
+      W.spout = new THREE.Vector3(0.14, 0.17, 0).applyEuler(new THREE.Euler(0, 2, 0)).add(pot.position);
       W.wood = { x: 2.0, z: 1.7 };
     }
     // a seat log across the fire, and the woodpile you take logs from
@@ -614,8 +813,10 @@
     W.trees = trees;
     W.motesKind = P.motes;
     W.dispose = function () {
-      scene.traverse(function (o) { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) { m.dispose(); }); });
+      scene.traverse(function (o) { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(function (m) { m.dispose(); }); if (o.isInstancedMesh) o.dispose(); });
       if (W.env) W.env.dispose();
+      if (W.groundTex) W.groundTex.dispose();
+      skyCtl.dispose();
     };
     return W;
   };

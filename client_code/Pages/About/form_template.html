@@ -4,7 +4,6 @@
   <section class="ab-hero">
     <div class="ui-wrap ab-hero-in">
       <div class="ab-hero-text">
-        <p class="eyebrow">How it works</p>
         <h1 id="ab-title">A fire you can sit by.</h1>
         <p class="ab-lead">Campfire isn't a video and it isn't a loop. Every flame you see is computed while you watch, from
           heat, fuel and air. Every crackle is made on the spot. Nothing about tonight's fire has happened before.</p>
@@ -22,8 +21,10 @@
       <article class="ab-card">
         <h3>Flames that flow</h3>
         <p>The flames are a fluid simulation running on your graphics card. Hot gas rises, swirls and pulls in cool air;
-          wood gas burns where it meets oxygen; soot glows, then burns out at the tips. It runs in several thin layers that
-          face you, a method from film effects work, so you see depth without the cost of a full 3D simulation.</p>
+          wood gas burns where it meets oxygen; soot glows, then burns out at the tips. The air's pressure is solved on
+          several grids at once, coarse to fine, so the whole plume moves as one: it necks, rolls up and puffs the way a
+          real fire does. It runs in thin layers that face you, a method from film effects work, so you see depth without
+          the cost of a full 3D simulation.</p>
       </article>
       <article class="ab-card">
         <h3>The colours of real fire</h3>
@@ -50,6 +51,18 @@
           The low roar follows the flames' own flicker. Resin whistles; damp wood hisses.</p>
       </article>
       <article class="ab-card">
+        <h3>A night that moves</h3>
+        <p>The same gusts that bend the flames lean the trees. Cloud drifts across the stars, and the stars turn at their
+          true pace, fifteen degrees an hour: sit long enough and the sky has moved. Mist creeps in when the air is
+          still. Snow starts and stops. The moon rides its arc and dims behind cloud. None of it repeats.</p>
+      </article>
+      <article class="ab-card">
+        <h3>Made to run on what you have</h3>
+        <p>The fire reads what your device can do, picks one of four pictures and remembers what worked. If frames slow
+          down it gives up the things you would miss least, first. A phone left alone draws half as often, and when the
+          sleep timer ends it stops drawing altogether, so nothing runs all night.</p>
+      </article>
+      <article class="ab-card">
         <h3>Chance, every time</h3>
         <p>The fire takes its randomness from your browser's cryptographic source. Where each flame starts on each log,
           when the wood pops, when the wind gusts: all of it is decided on the spot. You can't watch the same fire
@@ -64,18 +77,22 @@
       <figure class="ab-place">
         <img src="_/theme/place-forest.jpg" alt="The fire in the boreal forest at midnight" width="1200" height="675" loading="lazy">
         <figcaption><b>Boreal midnight.</b> Spruce and pine, a canvas tent, an axe in a stump. Crickets chirp at the pace
-          Dolbear's law gives for a cool summer night; a great horned owl calls; fireflies drift in the trees. No moon, so
-          the Milky Way is bright.</figcaption>
+          Dolbear's law gives for a cool summer night; a brook runs somewhere behind you; great horned owls call, and
+          sometimes answer each other. Fireflies drift in the trees, mist gathers between them, and moths find the
+          light. No moon, so the Milky Way is bright.</figcaption>
       </figure>
       <figure class="ab-place">
         <img src="_/theme/place-snow.jpg" alt="The fire on a snowy lakeshore under a full moon, a dark treeline across the frozen lake" width="1200" height="675" loading="lazy">
-        <figcaption><b>Lakeshore, first snow.</b> A full moon over a frozen lake. The ice sings and booms, wolves howl far
-          off, snow sometimes falls, and on some nights the northern lights come out.</figcaption>
+        <figcaption><b>Lakeshore, first snow.</b> A full moon over a frozen lake. The ice sings and booms, frost cracks in
+          the trees, a boreal owl toots, wolves howl far off. Snow comes and goes with the cloud, mist lies on the ice,
+          your breath shows in the cold, and on some nights the northern lights come out.</figcaption>
       </figure>
       <figure class="ab-place">
         <img src="_/theme/place-desert.jpg" alt="The fire in a desert canyon, a dead juniper and a bedroll beside it" width="1200" height="675" loading="lazy">
-        <figcaption><b>Desert canyon.</b> Sandstone walls, a dead juniper, a coffee pot by the stones. Coyote calls echo
-          off the rock, the air is still and the sky is the darkest of the three.</figcaption>
+        <figcaption><b>Desert canyon.</b> Sandstone walls, a dead juniper, a coffee pot that simmers and steams when the
+          fire is hot. Coyote calls echo off the rock, a poorwill whistles, dust hangs in the firelight, and far beyond
+          the rim lightning blinks, its thunder arriving long after. The air is still and the sky is the darkest of the
+          three.</figcaption>
       </figure>
     </div>
   </section>
@@ -114,13 +131,15 @@
       </details>
       <details>
         <summary>Will it drain my battery?</summary>
-        <p>It uses the graphics chip, so it uses more power than a web page usually does. If a device struggles, the
-          picture quality steps down by itself. "Light" in the settings is the gentlest.</p>
+        <p>It uses the graphics chip, so it uses more power than a web page usually does. It spares what it can: a phone
+          left alone draws half as many frames, the picture eases off by itself if a device struggles, and when the sleep
+          timer ends drawing stops until you touch the screen. "Lightest" in the settings is the gentlest.</p>
       </details>
       <details>
         <summary>Does it work on a phone?</summary>
-        <p>Yes, on recent phones and tablets with WebGL 2 (current Safari, Chrome, Firefox and Edge). Headphones make the
-          sound much better.</p>
+        <p>Yes, on phones and tablets with WebGL 2 (current Safari, Chrome, Firefox and Edge). Older phones get a lighter
+          picture, chosen for them; you can also pick "Lightest" in the settings. Headphones make the sound much
+          better.</p>
       </details>
       <details>
         <summary>What does "others by a fire right now" mean?</summary>
@@ -141,12 +160,16 @@
     <p class="muted">Campfire stands on decades of work by people who studied fire, fluids, light and sound:</p>
     <ul class="ab-refs">
       <li>Jos Stam, <i>Stable Fluids</i>, SIGGRAPH 1999: the fluid solver.</li>
+      <li>Achi Brandt, <i>Multi-Level Adaptive Solutions to Boundary-Value Problems</i>, 1977: multigrid, how the pressure
+        is solved on coarse and fine grids together.</li>
       <li>Ronald Fedkiw, Jos Stam and Henrik Wann Jensen, <i>Visual Simulation of Smoke</i>, SIGGRAPH 2001: vorticity
         confinement, the small swirls.</li>
       <li>Andrew Selle and others, <i>An Unconditionally Stable MacCormack Method</i>, 2008: sharp flame edges.</li>
       <li>Christopher Horvath and Willi Geiger, <i>Directable, High-Resolution Simulation of Fire on the GPU</i>, SIGGRAPH
         2009: fire in camera-facing slices.</li>
       <li>Andy Farnell, <i>Designing Sound</i>, MIT Press 2010: crackling, hissing and lapping, built from scratch.</li>
+      <li>Marcel Minnaert, <i>On Musical Air-Bubbles and the Sounds of Running Water</i>, 1933, and Kees van den Doel,
+        <i>Physically Based Models for Liquid Sounds</i>, 2005: the brook and the simmering pot, one bubble at a time.</li>
       <li>Chris Wyman, Peter-Pike Sloan and Peter Shirley, <i>Simple Analytic Approximations to the CIE XYZ Color Matching
         Functions</i>, 2013: the colours of glowing soot.</li>
       <li>Jorge Jimenez, <i>Next Generation Post Processing in Call of Duty: Advanced Warfare</i>, SIGGRAPH 2014: the glow

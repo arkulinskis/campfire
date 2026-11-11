@@ -22,6 +22,8 @@ def status_text(st):
     """One quiet line about how the fire is doing."""
     if not st.get("lit"):
         return ""
+    if st.get("asleep"):
+        return "The fire has burned down and the picture is resting. Touch the screen to bring it back."
     p, coals, logs, burning = st.get("power", 0), st.get("coals", 0), st.get("logs", 0), st.get("burning", 0)
     mins = st.get("minutes", 0)
     tail = (" · %s by the fire" % state.plural(mins, "minute")) if mins else ""
@@ -186,8 +188,10 @@ class Fire(FireTemplate):
             self.fallback.visible = True
             self.intro.visible = False
             self.hud.visible = False
-        elif name == "slept":
-            state.toast("Goodnight. The fire has burned down.")
+        elif name == "slept":   # the engine stops drawing here (no battery spent all night); a touch or a key wakes it
+            state.toast("Goodnight. The fire has burned down. Touch the screen to bring it back.")
+        elif name == "woke":
+            self._wake()
         elif name == "wave_to":
             data = event_args.get("data")
             self._wave(int(data) if isinstance(data, (int, float)) else None)
