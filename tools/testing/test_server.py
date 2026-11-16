@@ -24,6 +24,8 @@ os.environ["ANVIL_APP_YAML"] = str(PROJECT / "anvil.yaml")  # the mock's tables 
 sys.path[:0] = [str(HERE / "mock"), str(_tmp)]
 import anvil.server  # noqa: E402
 import anvil.users  # noqa: E402
+import anvil.secrets  # noqa: E402
+anvil.secrets.SECRETS["admin_emails"] = "admin@example.com"  # the App Secret, faked
 from anvil.tables import app_tables as T  # noqa: E402
 
 M = {p.stem: importlib.import_module("app." + p.stem) for p in sorted((PROJECT / "server_code").glob("*.py"))}
@@ -200,7 +202,7 @@ assert "sid" in r["tables"]["embers"] and r["tables"]["no_such_table"] is None, 
 
 # ---------------------------------------------------------------------------------- every callable is public on purpose
 # Campfire has no accounts. Every callable must be listed here, so a new one gets a second look.
-PUBLIC = {"session_ping", "ember_heartbeat", "circle_act", "legal_state", "legal_accept"}
+PUBLIC = {"log_client_error", "session_ping", "ember_heartbeat", "circle_act", "legal_state", "legal_accept"}
 for name in sorted(anvil.server.CALLABLES):
     assert name in PUBLIC, "%s is a new public callable: check its input and add it to PUBLIC in test_server.py" % name
 

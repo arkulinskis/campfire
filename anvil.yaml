@@ -1,5 +1,69 @@
 allow_embedding: false
 db_schema:
+  error_log:
+    client: none
+    columns:
+    - admin_ui: {order: 0, width: 200}
+      name: when
+      type: datetime
+    - admin_ui: {order: 1, width: 120}
+      name: source
+      type: string
+    - admin_ui: {order: 2, width: 160}
+      name: kind
+      type: string
+    - admin_ui: {order: 3, width: 300}
+      name: message
+      type: string
+    - admin_ui: {order: 4, width: 300}
+      name: traceback
+      type: string
+    - admin_ui: {order: 5, width: 200}
+      name: page
+      type: string
+    - admin_ui: {order: 6, width: 120}
+      name: session
+      type: string
+    - admin_ui: {order: 7, width: 200}
+      name: user
+      target: users
+      type: link_single
+    indexes: []
+    server: full
+    title: Error log
+  users:
+    client: none
+    columns:
+    - admin_ui: {order: 0, width: 200}
+      name: email
+      type: string
+    - admin_ui: {order: 1, width: 120}
+      name: enabled
+      type: bool
+    - admin_ui: {order: 2, width: 200}
+      name: last_login
+      type: datetime
+    - admin_ui: {order: 3, width: 200}
+      name: password_hash
+      type: string
+    - admin_ui: {order: 4, width: 120}
+      name: n_password_failures
+      type: number
+    - admin_ui: {order: 5, width: 120}
+      name: confirmed_email
+      type: bool
+    - admin_ui: {order: 6, width: 200}
+      name: signed_up
+      type: datetime
+    - admin_ui: {order: 7, width: 200}
+      name: remembered_logins
+      type: simpleObject
+    - admin_ui: {order: 90, width: 120}
+      name: is_admin
+      type: bool
+    indexes: []
+    server: full
+    title: Users
   circle_news:
     client: none
     columns:
@@ -170,6 +234,12 @@ services:
     enable_v2: true
   server_config: {}
   source: /runtime/services/tables.yml
+- client_config: {allow_remember_me: true, allow_signup: false, confirm_email: false, enable_automatically: true, remember_me_days: 30, use_email: true, use_google: true}
+  server_config: {user_table: users}
+  source: /runtime/services/anvil/users.yml
+- client_config: {}
+  server_config: {}
+  source: /runtime/services/anvil/secrets.yml
 startup:
   module: startup
   type: module
