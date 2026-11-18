@@ -267,6 +267,9 @@ tools/                     check.py, assets.py, build_icons.py, make_icons.py, u
   **But** anvil.yaml does have a users service block (from the template), and on 2026-11-18 install.py added
   legal_version/legal_accepted_at/legal_source to `users`: after a legal install, diff anvil.yaml's db_schema
   against HEAD and drop those columns. tools/assets.py rewrites anvil.yaml in block style (reformat only).
+- **@keyframes names are global**: a second `@keyframes cf-rise` (the rising words, 2026-11-18) silently replaced the
+  intro's and faded the whole opening screen to nothing. grep app.css for a name before adding one; flow.js now
+  checks the invitation's opacity.
 - Test runs share ONE browser session between the page and the CF_TEST visitor: heartbeat (12/min), act (20/min),
   say (1 per 5 s) rate limits count both; flow.js `vbeat` waits them out. Names from a run in the last 3 minutes are
   still taken in the circle: tests pick names per run.

@@ -35,6 +35,9 @@
     // ---- arriving: a dark camp, a laid fire, the invitation
     await page('#fire', () => vis($('.cf-intro')) && $('.cf-stage canvas'), 'the fire page');
     ok(text($('.cf-title')) === 'Sit by the fire.', 'fire page: the invitation is the main heading');
+    await until(() => +getComputedStyle(document.querySelector('.cf-intro')).opacity > 0.95, 'the invitation to finish fading in', 12000).catch(() => 0);   // an animation-name clash once faded it out
+    await sleep(1500);
+    ok(+getComputedStyle($('.cf-intro')).opacity > 0.95, 'the invitation stays visible after it fades in (opacity ' + getComputedStyle($('.cf-intro')).opacity + ')');
     await until(() => F() && F().ok, 'the fire engine');
     ok(F().ok && !st().lit, 'engine: WebGL 2 runs and the fire is laid but not lit');
     ok(st().kindling >= 6 && st().logs >= 3, 'engine: a teepee of kindling and ' + st().logs + ' logs waits');

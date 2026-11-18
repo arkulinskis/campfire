@@ -451,19 +451,19 @@ html.cf-idle .cf-tag:not(.is-acting) { opacity: 0; pointer-events: none; }
 .cf-say { position: absolute; left: 0; top: 0; pointer-events: none; }
 .cf-say.is-hidden { visibility: hidden; }
 .cf-say-in { display: flex; flex-direction: column; align-items: center; gap: 2px; white-space: nowrap;
-  animation: cf-rise 9s cubic-bezier(.22, .61, .36, 1) both; }
+  animation: cf-words-rise 9s cubic-bezier(.22, .61, .36, 1) both; }
 .cf-say-words { font: italic 500 clamp(1.25rem, 3.4vw, 1.9rem)/1.1 var(--font-display); color: #ffe6c7; letter-spacing: .01em;
   text-shadow: 0 0 2px rgba(255, 170, 90, .9), 0 1px 14px rgba(0, 0, 0, .85); }
 .cf-say-name { font: 500 .78rem/1.2 var(--font-body); color: #d9c4a8; letter-spacing: .06em; text-shadow: 0 1px 8px #000; }
-@keyframes cf-rise {
+@keyframes cf-words-rise {
   0% { opacity: 0; transform: translate(calc(var(--lane, 0) * 64px), 26px) scale(.92); filter: blur(3px); }
   12% { opacity: 1; filter: blur(0); }
   70% { opacity: 1; }
   100% { opacity: 0; transform: translate(calc(var(--lane, 0) * 64px + 10px), -110px) scale(1.04); filter: blur(2px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cf-say-in { animation-name: cf-glow; }
-  @keyframes cf-glow { 0% { opacity: 0; } 10%, 75% { opacity: 1; } 100% { opacity: 0; } }
+  .cf-say-in { animation-name: cf-words-glow; }
+  @keyframes cf-words-glow { 0% { opacity: 0; } 10%, 75% { opacity: 1; } 100% { opacity: 0; } }
 }
 /* the Circle dialog: gestures, three words, your name */
 .cf-gestures { display: flex; flex-wrap: wrap; gap: 8px; }
