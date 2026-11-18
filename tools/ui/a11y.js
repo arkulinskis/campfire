@@ -91,6 +91,15 @@
     ok($$('.cf-settings input[type=range]').every((r) => r.getAttribute('aria-label') || r.closest('label')), 'settings: the sliders have names');
     $('.cf-settings .anvil-role-btn-primary button').click();
     await until(() => !$('.cf-settings'), 'closed');
+    // the Circle dialog (gestures, three words, your name): there once the first heartbeat seats you
+    if (window.CF_TEST && window.CF_TEST.circle) await window.CF_TEST.circle.pulse();
+    const circleBtn = await until(() => $$('.cf-tray button').find((b) => vis(b) && b.textContent.trim() === 'Circle'), 'the Circle button');
+    circleBtn.click();
+    await until(() => vis($('.cf-circle')), 'the Circle dialog');
+    await sleep(1800); await axeRun('circle dialog');
+    ok($$('.cf-circle input').every((i) => i.closest('label')), 'circle dialog: the word and name boxes have names');
+    $$('.cf-circle button').find((b) => b.textContent.trim() === 'Close').click();
+    await until(() => !vis($('.cf-circle')), 'circle closed');
     log.push(bad.length ? 'PROBLEMS: ' + bad.join(' | ') : 'PASSED');
     return { ok: !bad.length, log: log };
   } catch (e) {

@@ -1,0 +1,43 @@
+<div class="cf-dialog cf-circle">
+  <div class="cf-dialog-head">
+    <h2 class="cf-dialog-title">Around the fire</h2>
+    <anvil-component type="Button" name="close_button" prop:text="Close" prop:role='["btn", "btn-ghost", "btn-icon", "ic-x"]'></anvil-component>
+  </div>
+
+  <div class="cf-set-group">
+    <span class="cf-set-label" id="cf-do-label">Do something</span>
+    <div class="cf-gestures" role="group" aria-labelledby="cf-do-label">
+      <anvil-component type="Button" name="wave_g" prop:text="Wave" prop:role='["btn", "cf-gesture", "ic-wave"]'></anvil-component>
+      <anvil-component type="Button" name="nod_g" prop:text="Nod" prop:role='["btn", "cf-gesture", "ic-check"]'></anvil-component>
+      <anvil-component type="Button" name="clap_g" prop:text="Clap" prop:role='["btn", "cf-gesture", "ic-sparkle"]'></anvil-component>
+      <anvil-component type="Button" name="laugh_g" prop:text="Laugh" prop:role='["btn", "cf-gesture", "ic-smile"]'></anvil-component>
+      <anvil-component type="Button" name="stars_g" prop:text="Point at the stars" prop:role='["btn", "cf-gesture", "ic-star"]'></anvil-component>
+      <anvil-component type="Button" name="stretch_g" prop:text="Stretch" prop:role='["btn", "cf-gesture", "ic-expand"]'></anvil-component>
+      <anvil-component type="Button" name="warm_g" prop:text="Warm your hands" prop:role='["btn", "cf-gesture", "ic-flame"]'></anvil-component>
+    </div>
+    <anvil-component type="Label" name="alone_note" prop:role='["cf-set-hint"]' prop:text="Nobody else sits by this fire yet. Gestures wait for company; your words still rise."></anvil-component>
+  </div>
+
+  <div class="cf-set-group">
+    <label class="ui-field"><span>Say three words</span>
+      <anvil-component type="TextBox" name="say_box" prop:placeholder="Warm night, everyone"></anvil-component>
+    </label>
+    <div class="cf-say-row">
+      <anvil-component type="Label" name="say_count" prop:role='["cf-set-hint"]' prop:text="Up to 3 words"></anvil-component>
+      <anvil-component type="Button" name="say_button" prop:text="Send to the fire" prop:role='["btn", "btn-primary", "ic-chat"]'></anvil-component>
+    </div>
+    <anvil-component type="Label" name="say_error" prop:role='["msg-error"]' prop:visible="false"></anvil-component>
+    <p class="cf-set-hint">The words rise out of the flames for everyone in your circle. Kind words only: anything rude is stopped.</p>
+  </div>
+
+  <div class="cf-set-group">
+    <label class="ui-field"><span>Your name in the circle</span>
+      <anvil-component type="TextBox" name="name_box" prop:placeholder="e.g. Sam"></anvil-component>
+    </label>
+    <div class="cf-say-row">
+      <anvil-component type="Label" name="name_note" prop:role='["cf-set-hint"]' prop:text="This browser remembers it for next time."></anvil-component>
+      <anvil-component type="Button" name="name_button" prop:text="Save name" prop:role='["btn", "ic-edit"]'></anvil-component>
+    </div>
+    <anvil-component type="Label" name="name_error" prop:role='["msg-error"]' prop:visible="false"></anvil-component>
+  </div>
+</div>

@@ -9,10 +9,14 @@ fullest circle with a free seat, else a new one), gets a seat number and an anim
 has. Seats fill in FILL order, so two people sit across the fire from each other. The browser draws the others
 sitting around its own fire.
 
-Slow sharing, not chat: circle_act records a wave (to everyone or to one seat), a log put on the fire (which wood,
-damp or not) or a stir in `circle_news`; the others' browsers pick it up with their next heartbeat (the reply holds
-the news since the `since` they send) and play it: the person waves, or throws that log into everyone's fire.
-News is deleted after NEWS_KEEP. There is no free text anywhere.
+Slow sharing, not chat: circle_act records a wave (to everyone or to one seat), another gesture (nod, clap, laugh,
+point at the stars, stretch, warm hands), a log put on the fire (which wood, damp or not) or a stir in
+`circle_news`; the others' browsers pick it up with their next heartbeat (the reply holds the news since the
+`since` they send) and play it: the person waves, or throws that log into everyone's fire.
+The only text: circle_say (one to three words, which rise out of everyone's fire) and circle_rename (your own name
+in the circle; also asked for when you sit down, as `name` in the heartbeat). Both go through Profanity.py.
+Every action carries an id made by the browser (`aid`): a repeated call (double click, a retried request) is stored
+once, and the same gesture from the same seat within REPEAT is dropped. News is deleted after NEWS_KEEP.
 """
 import datetime as dt
 import hashlib
@@ -24,6 +28,7 @@ import anvil.tables.query as q
 from anvil.tables import app_tables
 
 from . import common as C
+from . import Profanity
 
 PLACES = ("forest", "snow", "desert")
 WOODS = {"forest": ("pine", "birch", "maple"), "snow": ("birch", "spruce", "ash"), "desert": ("mesquite", "juniper", "pinon")}
@@ -36,7 +41,10 @@ SEATS = 6
 FILL = (0, 3, 1, 4, 2, 5)          # the second person sits across the fire, then the gaps fill in
 NAMES = ("Fox", "Heron", "Wren", "Otter", "Lynx", "Owl", "Moth", "Hare", "Raven", "Elk", "Marten", "Loon",
          "Badger", "Finch", "Crane", "Beaver", "Marmot", "Kestrel")
-KINDS = ("wave", "log", "stir")
+GESTURES = ("wave", "nod", "clap", "laugh", "stars", "stretch", "warm")
+KINDS = GESTURES + ("log", "stir")
+REPEAT = dt.timedelta(seconds=3)   # the same gesture (or words) again this soon from the same seat = one
+AID = re.compile(r"^[A-Za-z0-9-]{8,40}$")
 
 
 def _look(sid):
@@ -53,7 +61,15 @@ def _alive_in(circle, now):
     return [r for r in app_tables.embers.search(circle=circle, seen=q.greater_than(now - ALIVE))]
 
 
-def _join(row, place, now):
+def _name_ok(name, taken):
+    """A name the visitor asked for, if it's clean and nobody in the circle has it (any case)."""
+    name, _why = Profanity.clean_name(name) if name else (None, None)
+    if name and name.lower() not in {str(t or "").lower() for t in taken}:
+        return name
+    return None
+
+
+def _join(row, place, now, want=None):
     """Seat this visitor in the fullest circle at this place that still has room (or a new circle)."""
     for _ in range(3):   # two people taking the same seat at the same moment: the later one picks again
         circles = {}
@@ -68,7 +84,7 @@ def _join(row, place, now):
             cid, taken = "c-%s-%08x" % (place, random.getrandbits(32)), {}
         seat = next(s for s in FILL if s not in taken)
         free_names = [n for n in NAMES if n not in taken.values()]
-        row.update(circle=cid, seat=seat, name=random.choice(free_names), joined=now)
+        row.update(circle=cid, seat=seat, name=_name_ok(want, taken.values()) or random.choice(free_names), joined=now)
         clash = [r for r in _alive_in(cid, now) if r["sid"] != row["sid"] and r["seat"] == seat]
         if not any((r["joined"] or now, r["sid"]) < (now, row["sid"]) for r in clash):
             return
@@ -94,16 +110,17 @@ def _circle(row, now, since):
                 continue   # my own news
             news.append({"id": n["nid"], "seat": int(n["seat"]), "kind": n["kind"],
                          "to": None if n["to_seat"] is None else int(n["to_seat"]), "wood": n["wood"] or "",
-                         "wet": bool(n["wet"]), "at": _ms(n["at"])})
+                         "wet": bool(n["wet"]), "text": n["text"] or "", "at": _ms(n["at"])})
         news.sort(key=lambda n: n["at"])
     return {"id": row["circle"], "seat": int(row["seat"]), "name": row["name"], "people": people, "news": news[-30:],
             "t": _ms(now)}
 
 
 @anvil.server.callable
-def ember_heartbeat(sid, place, since=None, count=True):
+def ember_heartbeat(sid, place, since=None, count=True, name=None):
     """Say this visitor is by a fire. Returns how many OTHER visitors are (when `count`), and this visitor's circle:
-    {id, seat, name, people: [{seat, name, look}], news: [...], t}. Pass the last reply's `t` as `since`."""
+    {id, seat, name, people: [{seat, name, look}], news: [...], t}. Pass the last reply's `t` as `since`.
+    `name` = the name this visitor chose before (kept in their browser): used when they sit down, if it's free."""
     sid = C.text(sid, 64)
     if not SID.match(sid):
         return C.fail("That isn't a visit code.")
@@ -119,7 +136,7 @@ def ember_heartbeat(sid, place, since=None, count=True):
         stale = row["seen"] is None or row["seen"] < now - ALIVE or row["place"] != place
         row.update(place=place, seen=now)
     if stale or not row["circle"]:
-        _join(row, place, now)
+        _join(row, place, now, C.text(name, 20) if name else None)
         since = None   # a new seat: no old news
     out = {"circle": _circle(row, now, since)}
     if count:
@@ -134,20 +151,89 @@ def ember_heartbeat(sid, place, since=None, count=True):
     return C.ok(**out)
 
 
+def _sitting(sid, now):
+    """This visitor's row if they sit in a circle right now, else None."""
+    row = app_tables.embers.get(sid=sid)
+    if row is None or not row["circle"] or row["seen"] is None or row["seen"] < now - ALIVE:
+        return None
+    return row
+
+
+def _post(row, now, kind, aid=None, to_seat=None, wood=None, wet=False, text=None):
+    """Store one piece of news, once: a repeated `aid`, or the same gesture/words again within REPEAT, isn't stored."""
+    aid = aid if isinstance(aid, str) and AID.match(aid) else None
+    if aid:
+        old = app_tables.circle_news.get(nid=aid)
+        if old is not None:
+            return old["nid"]
+    if kind not in ("log", "stir"):
+        for n in app_tables.circle_news.search(circle=row["circle"], seat=row["seat"], kind=kind,
+                                               at=q.greater_than(now - REPEAT)):
+            if n["to_seat"] == to_seat and (n["text"] or None) == (text or None):
+                return n["nid"]
+    nid = aid or "%x%04x" % (_ms(now), random.getrandbits(16))
+    app_tables.circle_news.add_row(circle=row["circle"], nid=nid, seat=row["seat"], kind=kind, to_seat=to_seat,
+                                   wood=wood, wet=bool(wet), text=text, at=now)
+    return nid
+
+
 @anvil.server.callable
-def circle_act(sid, kind, to=None, wood=None, wet=False):
-    """Share something with this visitor's circle: a wave (to everyone, or `to` one seat), a log (`wood` of this place,
-    `wet` for a damp branch) or a stir. Nothing else can be sent: there is no text."""
+def circle_say(sid, words, aid=None):
+    """Send one to three words to the circle: they rise out of everyone's fire. Kind words only (Profanity.py)."""
+    sid = C.text(sid, 64)
+    if not SID.match(sid):
+        return C.fail("That isn't a visit code.")
+    text, why = Profanity.clean_words(C.text(words, 80))
+    if why:
+        return C.fail(why)
+    if C.rate_limited("say", 5, 60) or C.rate_limited("say_gap", 1, 5):
+        return C.fail("Let the last words rise first.")
+    now = C.now()
+    row = _sitting(sid, now)
+    if row is None:
+        return C.fail("You're not sitting in a circle right now.")
+    return C.ok(id=_post(row, now, "say", aid, text=text), text=text)
+
+
+@anvil.server.callable
+def circle_rename(sid, name):
+    """Change this visitor's name in their circle (the others see it with their next heartbeat)."""
+    sid = C.text(sid, 64)
+    if not SID.match(sid):
+        return C.fail("That isn't a visit code.")
+    clean, why = Profanity.clean_name(C.text(name, 40))
+    if why:
+        return C.fail(why)
+    if C.rate_limited("rename", 6, 600):
+        return C.fail("That's a lot of names. Try again in a few minutes.")
+    now = C.now()
+    row = _sitting(sid, now)
+    if row is None:
+        return C.fail("Sit by the fire first: your name comes with your seat.")
+    if clean == row["name"]:
+        return C.ok(name=clean)
+    others = [r["name"] for r in _alive_in(row["circle"], now) if r["sid"] != sid]
+    if not _name_ok(clean, others):
+        return C.fail("Someone in your circle is already called %s." % clean)
+    row.update(name=clean)
+    return C.ok(name=clean)
+
+
+@anvil.server.callable
+def circle_act(sid, kind, to=None, wood=None, wet=False, aid=None):
+    """Share something with this visitor's circle: a gesture (a wave to everyone or `to` one seat; a nod, clap,
+    laugh, stretch, warm hands or pointing at the stars), a log (`wood` of this place, `wet` for a damp branch) or a
+    stir. `aid` = an id the browser made for this action, so a repeated call counts once. No text here."""
     sid = C.text(sid, 64)
     if not SID.match(sid):
         return C.fail("That isn't a visit code.")
     if kind not in KINDS:
-        return C.fail("Only waves, logs and stirring are shared.")
+        return C.fail("That isn't something you can do by the fire.")
     if C.rate_limited("act", 20, 60):
         return C.fail("Easy now. Give the fire a minute.")
     now = C.now()
-    row = app_tables.embers.get(sid=sid)
-    if row is None or not row["circle"] or row["seen"] is None or row["seen"] < now - ALIVE:
+    row = _sitting(sid, now)
+    if row is None:
         return C.fail("You're not sitting in a circle right now.")
     to_seat = None
     if kind == "wave" and to is not None:
@@ -160,10 +246,7 @@ def circle_act(sid, kind, to=None, wood=None, wet=False):
     woods = WOODS.get(row["place"], WOODS["forest"])
     if kind == "log" and wood not in woods:
         return C.fail("That wood doesn't grow here.")
-    nid = "%x%04x" % (_ms(now), random.getrandbits(16))
-    app_tables.circle_news.add_row(circle=row["circle"], nid=nid, seat=row["seat"], kind=kind, to_seat=to_seat,
-                                   wood=wood if kind == "log" else None, wet=bool(wet) if kind == "log" else False,
-                                   at=now)
+    nid = _post(row, now, kind, aid, to_seat, wood if kind == "log" else None, bool(wet) if kind == "log" else False)
     return C.ok(id=nid)
 
 

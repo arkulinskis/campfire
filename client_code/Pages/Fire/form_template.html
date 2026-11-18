@@ -38,10 +38,13 @@
         <anvil-component type="RepeatingPanel" name="wood_panel" prop:item_template="Campfire.Items.WoodButton" prop:role='["contents"]'></anvil-component>
         <anvil-component type="Button" name="stir_button" prop:text="Stir" prop:role='["btn", "cf-wood", "cf-stir", "ic-stir"]' prop:tooltip="Stir the coals (S)"></anvil-component>
         <anvil-component type="Button" name="wave_button" prop:text="Wave" prop:role='["btn", "cf-wood", "cf-wave", "ic-wave"]' prop:tooltip="Wave to everyone by this fire (W). Tap someone to wave to them."></anvil-component>
+        <anvil-component type="Button" name="circle_button" prop:text="Circle" prop:role='["btn", "cf-wood", "cf-wave", "ic-users"]' prop:tooltip="Gestures, three words for the fire, your name (C)"></anvil-component>
         <anvil-component type="Button" name="relight_button" prop:text="Strike a match" prop:role='["btn", "cf-wood", "cf-relight", "ic-flame"]'></anvil-component>
       </div>
     </div>
   </div>
+  <!-- words said to the circle, read out (they show rising out of the flames: cf-people.js) -->
+  <anvil-component type="Label" name="said_label" prop:role='["sr"]'></anvil-component>
 
   <!-- news from the circle: stays visible while the controls are faded away -->
   <div class="cf-feed" anvil:name="feed">

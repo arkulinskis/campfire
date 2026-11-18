@@ -118,9 +118,15 @@ class FireStage(FireStageTemplate):
             self._engine.setCircle(json.dumps({"seat": circle["seat"], "people": circle["people"]}) if circle else "")
 
     def circle_act(self, seat, kind, to=None, wood=None, wet=False):
-        """Play what someone in the circle did: a wave (to a seat, or everyone), a log thrown in, a stir."""
+        """Play what someone in the circle did: a gesture (wave to a seat or everyone, nod, clap, laugh, stars, stretch,
+        warm), a log thrown in, a stir."""
         if self._ready():
             self._engine.circleAct(int(seat), str(kind), -1 if to is None else int(to), wood or "", bool(wet))
+
+    def circle_say(self, seat, text, name=""):
+        """Words said to the circle rise out of the flames (name = who said them; "" for your own)."""
+        if self._ready():
+            self._engine.circleSay(int(seat), str(text), str(name or ""))
 
     def state(self):
         return fire.state(self._engine) if self._ready() else {"ok": False, "lit": False}

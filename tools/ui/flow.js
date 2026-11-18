@@ -146,6 +146,80 @@
     const hd = pp.headPos().project(cam), hip = pp.worldPos().project(cam);
     const cx = (hd.x * 0.5 + 0.5) * rect.width + rect.left, cy = ((0.5 - hd.y * 0.5) + (0.5 - hip.y * 0.5)) / 2 * rect.height + rect.top;
     ok(F().people.hit(cx, cy) === vseat && F().people.hit(rect.left + 4, rect.top + 4) === -1, 'a tap on the person finds their seat, a tap elsewhere does not');
+    // ---- more gestures, and nothing plays twice
+    for (let i = 0; i < 30 && (vp().act || vp().queue.length); i++) F().people.update(0.4, F().time, F().camera, false);
+    const vbeat = async (since) => {   // the visitor's heartbeat (shares this browser's rate limit with mine: wait it out)
+      for (let i = 0; i < 8; i++) { const r = await C.visitor(vsid, 'beat', since); if (r && r.ok) return r; await sleep(8000); }
+      throw new Error('the visitor heartbeat stayed rate limited');
+    };
+    const t2 = (await vbeat(nb2.circle.t)).circle.t;
+    const nodA = await C.visitor(vsid, 'nod'), nodB = await C.visitor(vsid, 'nod'), cl = await C.visitor(vsid, 'clap');
+    ok(nodA.ok && nodB.ok && nodA.id === nodB.id && cl.ok, 'the visitor nods twice in a row (stored once: ' + nodA.id + ') and claps');
+    await C.pulse();
+    await until(() => / claps\.$/.test(text($('.anvil-role-cf-feed-text'))), 'their clap', 40000);
+    ok(true, 'news: "' + vname + ' nods." then "' + text($('.anvil-role-cf-feed-text')) + '"');
+    await C.pulse();   // the same news again (the server re-sends for 20 s): already played
+    const kinds = [vp().act && vp().act.kind].concat(vp().queue.map((q) => q.kind)).filter(Boolean);
+    ok(kinds.filter((k) => k === 'nod').length <= 1 && kinds.filter((k) => k === 'clap').length <= 1, 'each gesture plays once (' + kinds.join(',') + ')');
+    F().circleAct(vseat, 'laugh'); F().circleAct(vseat, 'laugh');
+    ok(vp().queue.filter((q) => q.kind === 'laugh').length + (vp().act.kind === 'laugh' ? 1 : 0) === 1, 'the same gesture arriving twice is queued once');
+    for (let i = 0; i < 30 && (vp().act || vp().queue.length); i++) F().people.update(0.4, F().time, F().camera, false);
+    ['stars', 'stretch', 'warm'].forEach((g) => { vp().play(g, null, {}); for (let i = 0; i < 12; i++) F().people.update(0.4, F().time, F().camera, false); });
+    ok(!vp().act && isFinite(vp().pose.rx) && isFinite(vp().pose.lean), 'stars, stretch and warm hands play through and settle');
+    // ---- three words rise out of the fire
+    const sv = await C.visitor(vsid, 'say', 'warm night here');
+    ok(sv.ok && sv.text === 'warm night here', 'the visitor says "warm night here"');
+    ok((await C.visitor(vsid, 'say', 'f u c k')).ok === false, 'a rude message is stopped by the server');
+    await C.pulse();
+    await until(() => $$('.cf-people .cf-say-words').some((e) => text(e) === 'warm night here'), 'words in the fire', 40000);
+    const sayEl = $$('.cf-people .cf-say').find((e) => text(e).indexOf('warm night here') >= 0);
+    ok(text(sayEl).indexOf(vname) > 0 && $$('.anvil-role-sr').some((e) => /says: warm night here/.test(text(e))),
+      'their words rise out of the flames with their name, and are read out');
+    // ---- the Circle dialog: a gesture, three words (filtered), my name
+    await click('.cf-tray button', 'Circle');
+    await until(() => vis($('.cf-circle')), 'the Circle dialog');
+    ok(['Wave', 'Nod', 'Clap', 'Laugh', 'Point at the stars', 'Stretch', 'Warm your hands'].every((l) => btn('.cf-circle button', l)), 'Circle: seven gestures, three words, your name');
+    const sayBox = $('.cf-circle input:not([type=checkbox])');
+    const type = (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); };
+    type(sayBox, 'one two three four');
+    await until(() => /three at most/.test(text($('.cf-circle'))), 'the word count');
+    ok(btn('.cf-circle button', 'Send to the fire').disabled, 'four words: Send is off');
+    type(sayBox, 'sh1t happens');
+    await click('.cf-circle button', 'Send to the fire');
+    await until(() => vis($('.cf-circle .anvil-role-msg-error')), 'the filter');
+    ok(/kind/.test(text($('.cf-circle .anvil-role-msg-error'))), 'a rude message: "' + text($('.cf-circle .anvil-role-msg-error')) + '"');
+    type(sayBox, 'good night all');
+    await sleep(5200);   // one message every five seconds
+    await click('.cf-circle button', 'Send to the fire');
+    await until(() => !vis($('.cf-circle')) && $$('.cf-people .cf-say-words').some((e) => text(e) === 'good night all'), 'my words in the fire', 15000);
+    ok(true, 'Send to the fire: the dialog closes and "good night all" rises from my flames');
+    const nb3 = await vbeat(t2);
+    ok(nb3.circle.news.some((n) => n.kind === 'say' && n.text === 'good night all' && n.seat === me.circle.seat), 'the visitor\'s heartbeat brings my words');
+    await click('.cf-tray button', 'Circle');
+    await until(() => vis($('.cf-circle')), 'the Circle dialog again');
+    const nameBox = $$('.cf-circle input').filter((e) => e.type !== 'checkbox')[1];
+    ok(nameBox.value === me.circle.name, 'my name box shows my animal name (' + nameBox.value + ')');
+    type(nameBox, 'Twat');
+    await click('.cf-circle button', 'Save name');
+    await until(() => $$('.cf-circle .anvil-role-msg-error').some(vis), 'the name filter');
+    const myName = 'Ember ' + ['Jo', 'Lu', 'Bo', 'Kai', 'Mae', 'Rue'][Math.floor(Date.now() / 1000) % 6];
+    type(nameBox, myName);
+    await click('.cf-circle button', 'Save name');
+    await until(() => /Saved/.test(text($('.cf-circle'))), 'saved');
+    ok(JSON.parse(localStorage.getItem('campfire.name')) === myName, 'Save name: "' + myName + '", remembered in this browser');
+    await click('.cf-circle button', 'Nod');
+    await until(() => text($('.anvil-role-cf-feed-text')) === 'You nod.', 'my nod');
+    ok(text($('.anvil-role-cf-presence')).indexOf("You're " + myName + '.') === 0,'a gesture from the dialog: "You nod."; presence: "' + text($('.anvil-role-cf-presence')).slice(0, 40) + '"');
+    const nb4 = await vbeat(t2);
+    ok(nb4.circle.people.some((p) => p.seat === me.circle.seat && p.name === myName) && nb4.circle.news.some((n) => n.kind === 'nod' && n.seat === me.circle.seat),
+      'the visitor sees my new name and my nod');
+    // the visitor renames: same person, new name tag
+    const nn = ['Juniper', 'Bramble', 'Sorrel', 'Thistle', 'Willow', 'Hazel'][Math.floor(Date.now() / 1000) % 6];
+    const rn = await C.visitor(vsid, 'rename', nn);
+    ok(rn.ok && rn.name === nn, 'the visitor calls themselves ' + nn);
+    await C.pulse();
+    await until(() => $$('.cf-people .cf-tag').some((t) => t.getAttribute('aria-label') === 'Wave to ' + nn), 'the renamed tag', 40000);
+    ok(F().people.all().filter((p) => p.seat === vseat && !p.leaving).length === 1 && text($('.anvil-role-cf-feed-text')).indexOf(vname + ' is now called ' + nn + '.') >= 0,'a rename keeps the person (no one leaves or arrives): "' + text($('.anvil-role-cf-feed-text')) + '"');
     // the fire has room for nine logs, then says so
     for (let i = 0; i < 8; i++) F().addLog('pine');
     await click('.cf-tray .anvil-role-cf-wood button', 'Pine');
@@ -235,6 +309,8 @@
     await click('.ui-header a.cf-back');
     await until(() => location.hash === '#fire' && window.UI_READY && vis($('.cf-hud')), 'back at the fire');
     ok(!vis($('.cf-intro')) && F().paused === false, 'Back to the fire: still lit, no second match needed');
+    const back = await window.CF_TEST.circle.pulse();
+    ok(back.sid === me.sid, 'the same visit code after coming back: no second seat, nothing replayed');
 
     // ---- let it go out, then light it again
     F().setAutoTend(false);

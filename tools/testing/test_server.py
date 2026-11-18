@@ -154,7 +154,8 @@ ok(call("circle_act", "p03-0000-circle", "wave", 0))                    # to sea
 ok(call("circle_act", "p03-0000-circle", "log", None, "juniper", False))
 ok(call("circle_act", "p03-0000-circle", "log", None, "mesquite", True))
 ok(call("circle_act", "p03-0000-circle", "stir"))
-bad(call("circle_act", "p03-0000-circle", "say", None, None), "only waves, logs, stirs")
+bad(call("circle_act", "p03-0000-circle", "say", None, None), "words go through circle_say")
+bad(call("circle_act", "p03-0000-circle", "dance"), "not a gesture")
 bad(call("circle_act", "p03-0000-circle", "log", None, "birch"), "birch doesn't grow in the desert")
 bad(call("circle_act", "p03-0000-circle", "wave", 9), "no seat 9")
 bad(call("circle_act", "p03-0000-circle", "wave", "<b>"), "seat must be a number")
@@ -172,6 +173,68 @@ other_circle = beat("p07", since=t0)["circle"]["news"]
 assert other_circle == [], "news stays in its circle"
 newcomer = beat("p09-new", since=None)["circle"]
 assert newcomer["news"] == [], "a newcomer gets no old news"
+
+# ---------------------------------------------------------------------------------- an action counts once
+t1 = beat("p01")["circle"]["t"]
+visit("s-p05")
+a1 = ok(call("circle_act", "p05-0000-circle", "wave", None, None, False, "aid-wave-00000001"))
+a2 = ok(call("circle_act", "p05-0000-circle", "wave", None, None, False, "aid-wave-00000001"))   # retried call
+a3 = ok(call("circle_act", "p05-0000-circle", "wave", None, None, False, "aid-wave-00000002"))   # double click
+assert a1["id"] == a2["id"] == a3["id"] == "aid-wave-00000001", (a1, a2, a3)
+ok(call("circle_act", "p05-0000-circle", "nod", None, None, False, "aid-nod-000000001"))
+ok(call("circle_act", "p05-0000-circle", "log", None, "juniper", False, "aid-log-000000001"))
+ok(call("circle_act", "p05-0000-circle", "log", None, "juniper", False, "aid-log-000000002"))    # two logs are two
+for g in ("clap", "laugh", "stars", "stretch", "warm"):
+    ok(call("circle_act", "p05-0000-circle", g))
+got = [n for n in beat("p01", since=t1)["circle"]["news"] if n["seat"] == 2]
+assert [n["kind"] for n in got] == ["wave", "nod", "log", "log", "clap", "laugh", "stars", "stretch", "warm"], got
+# the same news comes again in the next reply (overlap) but with the same ids: the browser plays it once
+again_news = [n["id"] for n in beat("p01", since=t1)["circle"]["news"] if n["seat"] == 2]
+assert again_news == [n["id"] for n in got]
+
+# ---------------------------------------------------------------------------------- three words, kind ones
+visit("s-p06")
+said = ok(call("circle_say", "p06-0000-circle", "  warm   night here ", "aid-say-000000001"))
+assert said["text"] == "warm night here", said
+heard = [n for n in beat("p01", since=t1)["circle"]["news"] if n["kind"] == "say"]
+assert heard and heard[-1]["text"] == "warm night here" and heard[-1]["seat"] == 5, heard
+for i, rude in enumerate(("fuck", "f u c k", "sh1t off", "kill yourself", "www.spam.com", "call 514 555 1234",
+                          "you dumb cunt")):
+    visit("s-rude%d" % i)
+    bad(call("circle_say", "p06-0000-circle", rude), "filtered: %s" % rude)
+visit("s-p06b")
+bad(call("circle_say", "p06-0000-circle", "one two three four"), "three words at most")
+bad(call("circle_say", "p06-0000-circle", ""), "empty")
+bad(call("circle_say", "p06-0000-circle", "<b>hi</b>"), "no markup")
+bad(call("circle_say", "zzzzzzzz-nobody", "hello"), "not in a circle")
+Pr = M["Profanity"]
+for fine in ("Scunthorpe is lovely", "the therapist said", "fire retardant", "class act", "this hit", "Bonne nuit"):
+    assert Pr.clean_words(fine)[0] == fine, fine
+visit("s-p06c")
+gap = [call("circle_say", "p06-0000-circle", "hello again %s" % w) for w in ("one", "two")]
+assert gap[1].get("ok") is False, "one message every few seconds"
+
+# ---------------------------------------------------------------------------------- your own name
+visit("s-p03r")
+bad(call("circle_rename", "p03-0000-circle", "x"), "too short")
+bad(call("circle_rename", "p03-0000-circle", "Twat Face"), "filtered")
+bad(call("circle_rename", "p03-0000-circle", "everyone"), "reserved")
+bad(call("circle_rename", "p03-0000-circle", "<i>Sam</i>"), "letters only")
+taken = [p["name"] for p in beat("p01", count=False)["circle"]["people"] if p["seat"] != 1][0]
+visit("s-p03r")
+bad(call("circle_rename", "p03-0000-circle", taken.lower()), "someone here has that name")
+r = ok(call("circle_rename", "p03-0000-circle", "sam"))
+assert r["name"] == "Sam", r
+seen = {p["seat"]: p for p in beat("p01", count=False)["circle"]["people"]}
+assert seen[1]["name"] == "Sam", seen
+bad(call("circle_rename", "zzzzzzzz-nobody", "Ann"), "not in a circle")
+# a name you chose before is used when you sit down (if it's free and clean)
+visit("s-named")
+named = ok(call("ember_heartbeat", "named-000-circle", "snow", None, False, "Juniper Jo"))["circle"]
+assert named["name"] == "Juniper Jo", named
+visit("s-named2")
+rude_name = ok(call("ember_heartbeat", "named-001-circle", "snow", None, False, "Dick"))["circle"]
+assert rude_name["name"] in P.NAMES, rude_name
 # acts are rate limited
 visit("s-p04")
 spam = [call("circle_act", "p04-0000-circle", "stir") for _ in range(25)]
@@ -203,7 +266,7 @@ assert "sid" in r["tables"]["embers"] and r["tables"]["no_such_table"] is None, 
 # ---------------------------------------------------------------------------------- every callable is public on purpose
 # Campfire has no accounts. Every callable must be listed here, so a new one gets a second look.
 PUBLIC = {"admin_status_report",  # checks for an admin itself (AppStatus._require_admin)
-          "log_client_error", "session_ping", "ember_heartbeat", "circle_act", "legal_state", "legal_accept"}
+          "log_client_error", "session_ping", "ember_heartbeat", "circle_act", "circle_say", "circle_rename", "legal_state", "legal_accept"}
 for name in sorted(anvil.server.CALLABLES):
     assert name in PUBLIC, "%s is a new public callable: check its input and add it to PUBLIC in test_server.py" % name
 

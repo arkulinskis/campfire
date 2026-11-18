@@ -1,69 +1,5 @@
 allow_embedding: false
 db_schema:
-  error_log:
-    client: none
-    columns:
-    - admin_ui: {order: 0, width: 200}
-      name: when
-      type: datetime
-    - admin_ui: {order: 1, width: 120}
-      name: source
-      type: string
-    - admin_ui: {order: 2, width: 160}
-      name: kind
-      type: string
-    - admin_ui: {order: 3, width: 300}
-      name: message
-      type: string
-    - admin_ui: {order: 4, width: 300}
-      name: traceback
-      type: string
-    - admin_ui: {order: 5, width: 200}
-      name: page
-      type: string
-    - admin_ui: {order: 6, width: 120}
-      name: session
-      type: string
-    - admin_ui: {order: 7, width: 200}
-      name: user
-      target: users
-      type: link_single
-    indexes: []
-    server: full
-    title: Error log
-  users:
-    client: none
-    columns:
-    - admin_ui: {order: 0, width: 200}
-      name: email
-      type: string
-    - admin_ui: {order: 1, width: 120}
-      name: enabled
-      type: bool
-    - admin_ui: {order: 2, width: 200}
-      name: last_login
-      type: datetime
-    - admin_ui: {order: 3, width: 200}
-      name: password_hash
-      type: string
-    - admin_ui: {order: 4, width: 120}
-      name: n_password_failures
-      type: number
-    - admin_ui: {order: 5, width: 120}
-      name: confirmed_email
-      type: bool
-    - admin_ui: {order: 6, width: 200}
-      name: signed_up
-      type: datetime
-    - admin_ui: {order: 7, width: 200}
-      name: remembered_logins
-      type: simpleObject
-    - admin_ui: {order: 90, width: 120}
-      name: is_admin
-      type: bool
-    indexes: []
-    server: full
-    title: Users
   circle_news:
     client: none
     columns:
@@ -107,6 +43,11 @@ db_schema:
         width: 200
       name: at
       type: datetime
+    - admin_ui:
+        order: 8
+        width: 200
+      name: text
+      type: string
     indexes: []
     server: full
     title: Circle news
@@ -151,14 +92,113 @@ db_schema:
     indexes: []
     server: full
     title: Embers
+  error_log:
+    client: none
+    columns:
+    - admin_ui:
+        order: 0
+        width: 200
+      name: when
+      type: datetime
+    - admin_ui:
+        order: 1
+        width: 120
+      name: source
+      type: string
+    - admin_ui:
+        order: 2
+        width: 160
+      name: kind
+      type: string
+    - admin_ui:
+        order: 3
+        width: 300
+      name: message
+      type: string
+    - admin_ui:
+        order: 4
+        width: 300
+      name: traceback
+      type: string
+    - admin_ui:
+        order: 5
+        width: 200
+      name: page
+      type: string
+    - admin_ui:
+        order: 6
+        width: 120
+      name: session
+      type: string
+    - admin_ui:
+        order: 7
+        width: 200
+      name: user
+      target: users
+      type: link_single
+    indexes: []
+    server: full
+    title: Error log
+  users:
+    client: none
+    columns:
+    - admin_ui:
+        order: 0
+        width: 200
+      name: email
+      type: string
+    - admin_ui:
+        order: 1
+        width: 120
+      name: enabled
+      type: bool
+    - admin_ui:
+        order: 2
+        width: 200
+      name: last_login
+      type: datetime
+    - admin_ui:
+        order: 3
+        width: 200
+      name: password_hash
+      type: string
+    - admin_ui:
+        order: 4
+        width: 120
+      name: n_password_failures
+      type: number
+    - admin_ui:
+        order: 5
+        width: 120
+      name: confirmed_email
+      type: bool
+    - admin_ui:
+        order: 6
+        width: 200
+      name: signed_up
+      type: datetime
+    - admin_ui:
+        order: 7
+        width: 200
+      name: remembered_logins
+      type: simpleObject
+    - admin_ui:
+        order: 90
+        width: 120
+      name: is_admin
+      type: bool
+    indexes: []
+    server: full
+    title: Users
 metadata:
-  description: "A campfire simulated live: fluid-simulated flames, crackles made by chance, logs that char and fall in. Three campsites, a sleep timer, no sign-up."
-  logo_img: "asset:icon-512.png"
-  title: "Campfire: a real fire, simulated live in your browser"
+  description: 'A campfire simulated live: fluid-simulated flames, crackles made by chance, logs that char and fall in. Three
+    campsites, a sleep timer, no sign-up.'
+  logo_img: asset:icon-512.png
+  title: 'Campfire: a real fire, simulated live in your browser'
 name: Campfire
 native_deps:
   head_html: |
-    <script src="_/theme/legal-kit.js?v=ab658df268"></script>
+    <script src="_/theme/legal-kit.js?v=2add615a71"></script>
     <!-- seo:start (APP_MAKER/seo: edit seo/apps/campfire.json and run seo.py, not here) -->
     <link rel="canonical" href="https://campfire.anvil.app/">
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
@@ -221,7 +261,7 @@ native_deps:
     <!-- Prepsto feedback panel: every "Submit feedback" link and button opens it (it is the only feedback channel). No floating button, no cookies, nothing loads until it is opened. Codes: APP_MAKER/prepsto-links.json -->
     <script src="https://prepsto.com/_/theme/widget.js" data-prepsto="44beb5s" data-button="false" data-label="Submit feedback" async></script>
     <link rel="stylesheet" href="_/theme/icons.css?v=f05ad3f9a4">
-    <link rel="stylesheet" href="_/theme/app.css?v=788ee34930">
+    <link rel="stylesheet" href="_/theme/app.css?v=cf2b0d661d">
     <script src="_/theme/app-kit.js?v=12bffa8103"></script>
     <!-- the fire engine (three.js r158 + Campfire's own simulation, world, sound) -->
     <script src="_/theme/three.min.js?v=3bfa54fdd7"></script>
@@ -229,9 +269,9 @@ native_deps:
     <script src="_/theme/cf-fire.js?v=844f86c323"></script>
     <script src="_/theme/cf-fx.js?v=1ea99fba48"></script>
     <script src="_/theme/cf-world.js?v=bd821f9f53"></script>
-    <script src="_/theme/cf-people.js?v=7c7babda7f"></script>
+    <script src="_/theme/cf-people.js?v=e3050ea3ba"></script>
     <script src="_/theme/cf-audio.js?v=edbac105d2"></script>
-    <script src="_/theme/cf-engine.js?v=192e2e71bd"></script>
+    <script src="_/theme/cf-engine.js?v=8477baccde"></script>
 package_name: Campfire
 runtime_options:
   client_version: '3'
@@ -243,8 +283,16 @@ services:
     enable_v2: true
   server_config: {}
   source: /runtime/services/tables.yml
-- client_config: {allow_remember_me: true, allow_signup: false, confirm_email: false, enable_automatically: true, remember_me_days: 30, use_email: true, use_google: true}
-  server_config: {user_table: users}
+- client_config:
+    allow_remember_me: true
+    allow_signup: false
+    confirm_email: false
+    enable_automatically: true
+    remember_me_days: 30
+    use_email: true
+    use_google: true
+  server_config:
+    user_table: users
   source: /runtime/services/anvil/users.yml
 - client_config: {}
   server_config: {}

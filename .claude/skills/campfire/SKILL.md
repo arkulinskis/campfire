@@ -9,7 +9,8 @@ description: Context, workflow and recipes for Campfire (folder campfire), the u
 place + a damp branch, stir), watch and listen. Three places (forest / snow lakeshore / desert canyon), settings
 (volumes, wind, sleep timer, keep it going, quality), an About page explaining how it works. No users, no sign-in;
 the server keeps the anonymous "You and N others are by a fire right now" count and seats visitors at the same
-place in circles of up to six: the others sit around your fire, and waves, logs and stirs are shared slowly.
+place in circles of up to six: the others sit around your fire, and gestures, logs, stirs and three-word messages
+(filtered, they rise out of the flames) are shared slowly; you can pick your own name.
 
 **Where it lives:**
 - Folder `C:\Users\arkvi\Documents\CLAUDE\campfire\` = the git clone of **github.com/arkulinskis/campfire**, branch `master`.
@@ -68,7 +69,10 @@ client_code/
   Components/FireStage     custom component around the engine (events state_change, fire_event)
   Items/WoodButton         a wood in the tray (x-add);  Items/PlaceCard: a campsite in the picker (x-pick)
   Dialogs/Places, Settings place picker; sound/wind/sleep/auto-tend/quality (load/apply live in Settings/__init__)
-server_code/               common.py (C.*), Presence.py (ember_heartbeat, circle_act), SchemaCheck.py, legal_server.py
+  Dialogs/Circle           "Around the fire": 7 gestures (returns the key), three words + your name (calls the page's
+                           _send_words / _rename and shows their error inline)
+server_code/               common.py (C.*), Presence.py (ember_heartbeat, circle_act, circle_say, circle_rename),
+                           Profanity.py (clean_words / clean_name / is_rude), SchemaCheck.py, legal_server.py
 theme/assets/              cf-*.js (the engine), three.min.js, app.css (tokens + pages + role layer), icons.css
                            (generated), app-kit.js, theme.css (spinner), icon.svg + PNGs, place-*.jpg
 tools/                     check.py, assets.py, build_icons.py, make_icons.py, ui_test.py + ui/ (flow, phone, a11y),
@@ -196,8 +200,20 @@ tools/                     check.py, assets.py, build_icons.py, make_icons.py, u
 - **The circle (Presence.py):** `ember_heartbeat(sid, place, since, count)` seats/keeps you (`_join`: fullest open
   circle at the place, FILL order 0,3,1,4,2,5, unique animal name, re-pick on a seat clash) and returns
   `{circle: {id, seat, name, people: [{seat, name, look}], news, t}, others?}`; pass the last `t` as `since` (news
-  re-sent for OVERLAP 20 s, the page skips seen ids). `circle_act(sid, kind, to, wood, wet)`: wave/log/stir only,
-  no text. Visit codes never leave the server (look = a hash). Tests: tools/testing/test_server.py (circles, 31
+  re-sent for OVERLAP 20 s, the page skips seen ids). `circle_act(sid, kind, to, wood, wet, aid)`: GESTURES (wave,
+  nod, clap, laugh, stars, stretch, warm) + log/stir. `circle_say(sid, words, aid)` (kind "say", column `text`) and
+  `circle_rename(sid, name)`; the heartbeat's `name` = the name saved in the browser (store "name"), used on join if
+  clean and free. All text goes through Profanity.py (whole-word list + ROOTS matched inside words; add a root only
+  if no harmless word contains it: "rapist" is in "therapist", "cunt" in "Scunthorpe", "retard" in "fire retardant").
+  **Once only** (2026-11-18, the user saw one wave play twice): `_post` stores an `aid` once and drops the same
+  gesture/words from a seat within REPEAT 3 s; Pages/Fire keeps the visit code and played news ids in module-level
+  `_VISIT` (survives the page being re-created), ignores held keys and repeats within AGAIN_MS; Person.play never
+  queues the same gesture twice; people are keyed by seat + look, so a rename doesn't re-seat anyone.
+  Visit codes never leave the server (look = a hash).
+- **New gesture:** add it to Presence.GESTURES, `DUR` + `NOTES` + a pose branch in cf-people.js Person.update (pose
+  targets rx/rz/re right arm, lx/lz/le left, lean, hy/hp/ty head + torso; `rate` = how fast the pose follows),
+  GESTURE_TEXT in Pages/Fire, a button in Dialogs/Circle (+ its handler and GESTURES there), and tests (test_server,
+  flow.js). Tests: tools/testing/test_server.py (circles, 31
   visitors -> circles of <= 6, news only to others, rate limits) and flow.js (a second visitor via
   `CF_TEST.circle.visitor(sid, kind, ...)` + `pulse()`).
 - **Looking at the people:** stage a circle in a shot with `F.setCircle(json)` then `F.setCircle = () => 0` (or the
@@ -248,6 +264,12 @@ tools/                     check.py, assets.py, build_icons.py, make_icons.py, u
   *visible* `.anvil-modal` (Pages/Fire `_dialog_open`).
 - Skulpt has no `typing`: for nullable DOM values use `anvil.js.call(window.Function("return document"))` (typed Any).
 - No users service: the legal kit installer skips the consent columns (legal-kit/install.py, since 2026-11-04).
+  **But** anvil.yaml does have a users service block (from the template), and on 2026-11-18 install.py added
+  legal_version/legal_accepted_at/legal_source to `users`: after a legal install, diff anvil.yaml's db_schema
+  against HEAD and drop those columns. tools/assets.py rewrites anvil.yaml in block style (reformat only).
+- Test runs share ONE browser session between the page and the CF_TEST visitor: heartbeat (12/min), act (20/min),
+  say (1 per 5 s) rate limits count both; flow.js `vbeat` waits them out. Names from a run in the last 3 minutes are
+  still taken in the circle: tests pick names per run.
 
 - The local App Server (1.18) lags hosted Anvil: no `HtmlComponent.attrs` (use state.set_attr), `Notification(role=)`
   raises (state.toast falls back), notifications are `.anvil-alert[data-notify]`, components are wrapped in

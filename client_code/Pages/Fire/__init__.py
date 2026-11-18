@@ -6,6 +6,7 @@ from anvil.js import window
 from ._anvil_designer import FireTemplate
 from ... import fire, state
 from ...Dialogs import Settings as settings_mod
+from ...Dialogs.Circle import Circle
 from ...Dialogs.Places import Places
 from ...Dialogs.Settings import Settings
 
@@ -16,6 +17,15 @@ BEAT_HIDDEN_MS = 60000  # ... while the tab is in the background
 COUNT_EVERY = 4         # the "N more by other fires" count is asked for every 4th heartbeat
 FEED_MS = 12000         # a line of news stays this long (20 s when it asks for a wave back)
 DAMP = {"label": "Damp branch", "note": "hisses, steams and smokes before it catches"}
+AGAIN_MS = 3500         # the same gesture again this soon is ignored (double clicks, a held key)
+# gestures: (what someone else does, what you do)
+GESTURE_TEXT = {"nod": ("nods", "nod"), "clap": ("claps", "clap"), "laugh": ("laughs", "laugh"),
+                "stars": ("points at the stars", "point at the stars"), "stretch": ("stretches", "stretch"),
+                "warm": ("warms their hands", "warm your hands")}
+
+# One visit per page load: the visit code and the news already played survive the fire page being opened again
+# (About and back), so you never get a second seat and nothing plays twice.
+_VISIT: dict = {"sid": None, "seen": {}}
 
 
 def status_text(st):
@@ -74,11 +84,12 @@ def presence_text(others, circle: dict):
                                                             "is" if len(people) == 1 else "are")
         more = (others or 0) - len(people)
         return line + (" %d more by other fires." % more if more > 0 else "")
+    me = ("You're %s. " % circle["name"]) if circle.get("name") else ""
     if others is None:
-        return ""
+        return me.strip()
     if others == 0:
-        return "Nobody else is by a fire right now. It is all yours."
-    return "You and %s are by a fire right now." % state.plural(others, "other")
+        return me + "Nobody else is by a fire right now. It is all yours."
+    return me + "You and %s are by a fire right now." % state.plural(others, "other")
 
 
 def a_log(label, wet):
@@ -91,7 +102,7 @@ def a_log(label, wet):
 class Fire(FireTemplate):
     """The campfire: you arrive in the dark beside a laid fire, strike a match, then tend it (woods, stir), change the
     place, the sound, the wind, or set it to burn down while you fall asleep. The controls fade away when you sit
-    still. Keys: L log, S stir, W wave, M sound, F full screen, P place.
+    still. Keys: L log, S stir, W wave, C circle (gestures, three words, your name), M sound, F full screen, P place.
 
     Others by a fire at the same place sit around yours (circles of up to six, seated by the server: Presence.py).
     What they do comes in slowly with each heartbeat: they wave, or throw a log on (it lands in your fire too)."""
@@ -103,13 +114,16 @@ class Fire(FireTemplate):
         self.settings = settings_mod.load()
         self.stage.quality = self.settings["quality"]
         self.stage.place = self.place
-        self.sid = self._new_sid()
+        if not _VISIT["sid"]:
+            _VISIT["sid"] = self._new_sid()
+        self.sid = _VISIT["sid"]
         self.others = None
         self.beat_at = 0
         self.beats = 0
         self.circle: dict = {}          # my circle from the last heartbeat ({} = none yet)
         self.since = None
-        self.seen_news: dict = {}
+        self.seen_news: dict = _VISIT["seen"]   # news ids already played (ids are unique: never reset)
+        self.sent_at: dict = {}                 # gesture -> when I last sent it (ms)
         self.wood_labels: dict = {}
         self.wave_back_seat = -1
         self.feed_timer = None
@@ -122,6 +136,8 @@ class Fire(FireTemplate):
         self.feed.visible = False
         self.wave_back_button.visible = False
         self.wave_button.visible = False
+        self.circle_button.visible = False
+        state.live(self.said_label)
         self._show_place()
         self._show_lit(fire.available() and fire.is_shared_lit())
         self.wood_panel.add_event_handler("x-add", self._add)
@@ -211,7 +227,7 @@ class Fire(FireTemplate):
     def _heartbeat(self):
         self.beats += 1
         count = self.others is None or self.beats % COUNT_EVERY == 1
-        r = state.call_quiet("ember_heartbeat", self.sid, self.place, self.since, count)
+        r = state.call_quiet("ember_heartbeat", self.sid, self.place, self.since, count, state.store_get("name"))
         if not (isinstance(r, dict) and r.get("ok")):
             return
         if "others" in r:
@@ -228,23 +244,28 @@ class Fire(FireTemplate):
             self._show_company()
             return
         first = not old or old.get("id") != c["id"] or old.get("seat") != c["seat"]
-        before = {} if first else {p["seat"]: p["name"] for p in old.get("people") or []}
-        now_ = {p["seat"]: p["name"] for p in c.get("people") or []}
+        # a person = seat + look (made from their visit code): a new name on the same person is a rename
+        before = {} if first else {(p["seat"], p.get("look")): p["name"] for p in old.get("people") or []}
+        now_ = {(p["seat"], p.get("look")): p["name"] for p in c.get("people") or []}
         self.circle, self.since = c, c.get("t")
         self.stage.set_circle(c)
         self._show_company()
         if first:
-            self.seen_news = {}
             if now_:
                 self._say("%s %s by this fire with you. Tap someone to wave."
                           % (names_text(list(now_.values())), "is" if len(now_) == 1 else "are"))
         else:
-            came = [n for s, n in now_.items() if before.get(s) != n]
-            went = [n for s, n in before.items() if now_.get(s) != n]
+            came = [n for k, n in now_.items() if k not in before]
+            went = [n for k, n in before.items() if k not in now_]
+            renamed = [(before[k], n) for k, n in now_.items() if k in before and before[k] != n]
+            lines = []
             if came:
-                self._say("%s sat down by the fire." % names_text(came))
-            elif went:
-                self._say("%s %s gone." % (names_text(went), "has" if len(went) == 1 else "have"))
+                lines.append("%s sat down by the fire." % names_text(came))
+            if went:
+                lines.append("%s %s gone." % (names_text(went), "has" if len(went) == 1 else "have"))
+            lines += ["%s is now called %s." % r for r in renamed]
+            if lines:
+                self._say(" ".join(lines))
         fresh = []
         for n in c.get("news") or []:
             if n["id"] not in self.seen_news and n["seat"] != c["seat"]:
@@ -276,9 +297,15 @@ class Fire(FireTemplate):
             self._say("%s puts %s on the fire." % (who, a_log(self.wood_labels.get(n.get("wood")), n.get("wet"))))
         elif kind == "stir":
             self._say("%s stirs the fire." % who)
+        elif kind == "say" and n.get("text"):
+            self.stage.circle_say(n["seat"], n["text"], who)
+            self.said_label.text = "%s says: %s" % (who, n["text"])
+        elif kind in GESTURE_TEXT:
+            self._say("%s %s." % (who, GESTURE_TEXT[kind][0]))
 
     def _show_company(self):
         self.wave_button.visible = self._company() and self.hud.visible
+        self.circle_button.visible = bool(self.circle) and self.hud.visible
 
     def _say(self, text, wave_back=-1):
         """One line of news at the top. It stays visible even while the controls are faded away."""
@@ -298,22 +325,76 @@ class Fire(FireTemplate):
         self.wave_back_seat = -1
 
     def _share(self, kind, to=None, wood=None, wet=False):
-        """Tell the circle (no-op when nobody else sits here). Returns the error to show, or None."""
+        """Tell the circle (no-op when nobody else sits here). Returns the error to show, or None.
+        Each action carries its own id, so a retried call is stored once (Presence._post)."""
         if not self._company():
             return None
-        r = state.call_quiet("circle_act", self.sid, kind, to, wood, wet)
+        r = state.call_quiet("circle_act", self.sid, kind, to, wood, wet, self._new_sid())
         if isinstance(r, dict) and r.get("ok") is False:
             return r.get("error")
         return None
+
+    def _again(self, key):
+        """True when this gesture was sent moments ago (a double click or a held key): ignore it."""
+        now = window.Date.now()
+        if now - self.sent_at.get(key, 0) < AGAIN_MS:
+            return True
+        self.sent_at[key] = now
+        return False
 
     def _wave(self, seat=None):
         if not self._company():
             return
         name = self._name(seat) if seat is not None else "everyone"
-        if not name or name == "you":
+        if not name or name == "you" or self._again("wave:%s" % seat):
             return
         problem = self._share("wave", seat)
         self._say(problem or "You wave to %s." % name)
+
+    def _gesture(self, kind):
+        if kind == "wave":
+            self._wave(None)
+            return
+        if not self._company() or kind not in GESTURE_TEXT or self._again(kind):
+            return
+        problem = self._share(kind)
+        self._say(problem or "You %s." % GESTURE_TEXT[kind][1])
+
+    def _send_words(self, text):
+        """Three words to the circle (the Circle dialog calls this). Returns the error to show, or None."""
+        r = state.call_quiet("circle_say", self.sid, text, self._new_sid())
+        if not isinstance(r, dict):
+            return "The fire didn't hear that. Try again in a moment."
+        if not r.get("ok"):
+            return r.get("error") or "That didn't go through."
+        self.stage.circle_say(self.circle.get("seat", 0), r.get("text") or text, "")
+        self.said_label.text = "You say: %s" % (r.get("text") or text)
+        return None
+
+    def _rename(self, name):
+        """Your name in the circle (the Circle dialog calls this). Returns the error to show, or None."""
+        r = state.call_quiet("circle_rename", self.sid, name)
+        if not isinstance(r, dict):
+            return "The fire didn't hear that. Try again in a moment."
+        if not r.get("ok"):
+            return r.get("error") or "That didn't go through."
+        state.store_set("name", r["name"])
+        if self.circle:
+            self.circle["name"] = r["name"]
+            self.presence_label.text = presence_text(self.others, self.circle)
+        return None
+
+    def _open_circle(self):
+        if not self.circle:
+            return
+        kind = alert(Circle(name=self.circle.get("name") or "", company=self._company(), say=self._send_words,
+                            rename=self._rename), buttons=[], role="app-dialog", dismissible=True)
+        if kind:
+            self._gesture(kind)
+
+    @handle("circle_button", "click")
+    def circle_button_click(self, **event_args):
+        self._open_circle()
 
     @handle("wave_button", "click")
     def wave_button_click(self, **event_args):
@@ -432,7 +513,7 @@ class Fire(FireTemplate):
         if str(target) in ("INPUT", "TEXTAREA", "SELECT") or _dialog_open() or getattr(event, "ctrlKey", False) or getattr(event, "metaKey", False) or getattr(event, "altKey", False):
             return
         k = str(getattr(event, "key", None)).lower()
-        if not self.hud.visible:
+        if not self.hud.visible or getattr(event, "repeat", False):   # a held key sends once
             return
         if k == "l" and self.wood_panel.items:
             first = list(self.wood_panel.items)[0]
@@ -441,6 +522,8 @@ class Fire(FireTemplate):
             self._stir()
         elif k == "w":
             self._wave(None)
+        elif k == "c":
+            self._open_circle()
         elif k == "m":
             self.sound_button_click()
         elif k == "f":
@@ -456,4 +539,8 @@ class Fire(FireTemplate):
     def _test_visitor(self, sid, kind, to=None, wood=None, wet=False):
         if kind == "beat":   # `to` = since (the visitor's last t), for reading the news
             return anvil.server.call("ember_heartbeat", sid, self.place, to, False)
+        if kind == "say":    # `to` = the words
+            return anvil.server.call("circle_say", sid, to)
+        if kind == "rename":  # `to` = the name
+            return anvil.server.call("circle_rename", sid, to)
         return anvil.server.call("circle_act", sid, kind, to, wood, wet)

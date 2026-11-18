@@ -8,7 +8,8 @@
 
    var people = new CF.People(engine)      (the engine makes one: engine.people)
    people.set(mySeat, [{seat, name, look}])  who sits where (seats 0..5; yours is where the camera is)
-   people.act(seat, 'wave'|'log'|'stir', toSeat, wood, wet)
+   people.act(seat, kind, toSeat, wood, wet)   kind: wave nod clap laugh stars stretch warm log stir
+   people.say(seat, text, name)     three words rising out of the flames (name = who said it; none for your own)
    people.update(dt, time, camera)  people.setWorld(world)  people.attach(el)  people.hit(clientX, clientY) -> seat
    people.list() -> for tests: [{seat, name, k, x, z, act, fade, shown}] */
 (function () {
@@ -22,6 +23,11 @@
   // k = 3 (the second person to arrive) sits on the seat log, to one side of the flames rather than hidden behind them.
   var SEATS = [null, [106, 2.0], [135, 2.2], [168, 2.42], [222, 2.15], [254, 2.0]];
   var FIRE = new V(0, 0.42, 0);
+  var WORDS_AT = new V(0, 1.05, 0);   // where words said to the circle appear: just above the flames
+  // how long each action takes (s); gestures are shared like waves (Presence.py GESTURES)
+  var DUR = { wave: 3.4, nod: 1.9, clap: 2.4, laugh: 2.4, stars: 3.6, stretch: 3.2, warm: 4.0, log: 1.25, stir: 2.0 };
+  var NOTES = { wave: 'waves', nod: 'nods', clap: 'claps', laugh: 'laughs', stars: 'points at the stars',
+                stretch: 'stretches', warm: 'warms their hands', log: 'adds a log', stir: 'stirs the fire' };
 
   // looks: wool blankets, jackets, skin, hair (linear colours, lit only by firelight)
   var BLANKETS = [[0.30, 0.05, 0.04], [0.30, 0.19, 0.06], [0.07, 0.15, 0.09], [0.06, 0.09, 0.17], [0.19, 0.17, 0.15],
@@ -197,7 +203,10 @@
   };
   // one thing at a time: what arrives while they're busy waits its turn (a log always lands, even if the queue is long)
   Person.prototype.play = function (kind, toPos, extra) {
-    var a = { kind: kind, t: 0, dur: kind === 'wave' ? 3.4 : kind === 'log' ? 1.25 : 2.0, to: toPos, extra: extra || {}, fired: false };
+    var a = { kind: kind, t: 0, dur: DUR[kind] || 2.0, to: toPos, extra: extra || {}, fired: false };
+    if (kind !== 'log' && kind !== 'stir') {   // a gesture already playing or waiting isn't played twice
+      if ((this.act && this.act.kind === kind) || this.queue.some(function (q) { return q.kind === kind; })) return;
+    }
     if (!this.act) { this.act = a; return; }
     this.queue.push(a);
     if (this.queue.length > 3) this.effect(this.queue.shift());
@@ -243,6 +252,26 @@
         rate = 5;
         T.rx = T.lx = -0.95 + 0.18 * Math.sin(a.t * 6); T.rz = T.lz = 0.1; T.re = T.le = -0.3; T.lean = 0.36; T.hp = 0.45;
         if (u > 0.3) this.effect(a);
+      } else if (a.kind === 'nod') {   // turn to you (or whoever), two slow nods
+        T.hy = aim.hy; T.ty = aim.ty; T.hp = 0.12 + 0.24 * Math.max(0, Math.sin(a.t * 6.6));
+      } else if (a.kind === 'clap') {   // hands together in front of the chest, a few soft claps
+        rate = 14; var on = u > 0.1 && u < 0.88;
+        T.rx = T.lx = -1.15; T.re = T.le = -0.62; T.lean = 0.16; T.hp = 0.2;
+        T.rz = T.lz = on ? -0.3 + 0.17 * Math.sin(a.t * 15) : -0.1;
+      } else if (a.kind === 'laugh') {   // head back, shoulders shaking
+        rate = 10; var sh = u < 0.85 ? Math.sin(a.t * 15) : 0;
+        T.lean = -0.07 + 0.04 * sh; T.hp = -0.3 + 0.05 * sh; T.re = T.le = -1.3;
+      } else if (a.kind === 'stars') {   // look up and point at the sky
+        rate = 4; var pt = u < 0.85;
+        T.hp = pt ? -0.55 : T.hp; T.hy = pt ? 0.28 : T.hy; T.ty = pt ? 0.12 : T.ty;
+        if (pt) { T.rx = -2.5; T.rz = 0.3; T.re = -0.12; }
+      } else if (a.kind === 'stretch') {   // both arms up, a lean back, then settle
+        rate = 3; var st = u < 0.72;
+        if (st) { T.rx = T.lx = -2.9; T.rz = T.lz = 0.38; T.re = T.le = -0.35; T.lean = -0.12; T.hp = -0.35; }
+      } else if (a.kind === 'warm') {   // palms to the fire, rubbing them now and then
+        rate = 6; var rub = Math.sin(a.t * 10) * (Math.sin(a.t * 1.6) > 0 ? 1 : 0);
+        Object.assign(T, warm); T.rz = T.lz = -0.16 + 0.07 * rub; T.lean = 0.26;
+        var fw = this.aim(FIRE); T.hy = fw.hy; T.hp = 0.38; T.ty = 0;
       }
       if (u >= 1) { this.effect(a); this.act = this.queue.shift() || null; this.waveSwing = 0; }
     }
@@ -296,19 +325,25 @@
     var self = this;
     tag.addEventListener('click', function (e) { e.stopPropagation(); if (self.engine.opts.onEvent) self.engine.opts.onEvent('wave_to', p.seat); });
     this.tags.appendChild(tag);
-    this.byKey[info.seat + ':' + info.name] = p;
+    p.key = info.seat + ':' + (info.look | 0);
+    this.byKey[p.key] = p;
     return p;
   };
-  // who sits where: arrivals fade in, people who left fade away
+  People.prototype.rename = function (p, name) {   // same person (seat + look), a name they chose
+    p.name = name; p.tag.firstChild.textContent = name; p.tag.setAttribute('aria-label', 'Wave to ' + name);
+  };
+  // who sits where: arrivals fade in, people who left fade away. A person is their seat + look (made from their visit
+  // code), so a new name doesn't seat a new person.
   People.prototype.set = function (me, list) {
     var self = this;
     if (me !== this.me) { this.me = me; this.clear(); }
     var want = {};
     (list || []).forEach(function (i) {
       if (i.seat === me) return;
-      var key = i.seat + ':' + i.name; want[key] = true;
+      var key = i.seat + ':' + (i.look | 0); want[key] = true;
       var p = self.byKey[key];
       if (p && p.leaving) p.leaving = false;
+      if (p && p.name !== i.name) self.rename(p, i.name);
       if (!p) self.add(i);
     });
     Object.keys(this.byKey).forEach(function (key) { if (!want[key]) self.byKey[key].leaving = true; });
@@ -330,26 +365,56 @@
       else if (kind === 'stir') this.engine.stir(true);
       return false;
     }
-    var toPos = kind === 'wave' ? (to === null || to === undefined || to < 0 ? this.engine.camera.position.clone().lerp(FIRE, 0.6) : this.seatPos(to)) : null;
+    var toEveryone = to === null || to === undefined || to < 0;
+    var toPos = kind === 'wave' || kind === 'nod' ? (toEveryone ? this.engine.camera.position.clone().lerp(FIRE, 0.6) : this.seatPos(to)) : null;
     p.play(kind, toPos, { wood: wood, wet: wet });
-    if (p.tag) {
-      var note = p.tag.lastChild, cls = kind === 'wave' ? (to === this.me ? 'waves to you' : 'waves') : kind === 'log' ? 'adds a log' : 'stirs the fire';
-      note.textContent = cls; p.tag.classList.add('is-acting'); p.tag.classList.toggle('is-to-you', kind === 'wave' && to === this.me);
-      clearTimeout(p.tagTimer); p.tagTimer = setTimeout(function () { p.tag.classList.remove('is-acting', 'is-to-you'); }, 5200);
-    }
+    this.note(p, kind === 'wave' && to === this.me ? 'waves to you' : NOTES[kind] || '', kind === 'wave' && to === this.me);
     return true;
+  };
+  People.prototype.note = function (p, text, toYou) {   // a few words under someone's name tag, for a few seconds
+    if (!p.tag || !text) return;
+    p.tag.lastChild.textContent = text; p.tag.classList.add('is-acting'); p.tag.classList.toggle('is-to-you', !!toYou);
+    clearTimeout(p.tagTimer); p.tagTimer = setTimeout(function () { p.tag.classList.remove('is-acting', 'is-to-you'); }, 5200);
+  };
+  // words said to the circle rise out of the flames (and show under the speaker's name tag)
+  People.prototype.say = function (seat, text, name) {
+    var self = this, el = document.createElement('div'), inner = document.createElement('div');
+    el.className = 'cf-say'; el.setAttribute('aria-hidden', 'true'); inner.className = 'cf-say-in';
+    var words = document.createElement('span'); words.className = 'cf-say-words'; words.textContent = text; inner.appendChild(words);
+    if (name) { var who = document.createElement('span'); who.className = 'cf-say-name'; who.textContent = name; inner.appendChild(who); }
+    this.lane = ((this.lane || 0) + 1) % 3;
+    inner.style.setProperty('--lane', String([0, -1, 1][this.lane]));
+    el.appendChild(inner); this.tags.appendChild(el);
+    this.says = (this.says || []).concat([el]);
+    while (this.says.length > 3) { var old = this.says.shift(); if (old.parentNode) old.parentNode.removeChild(old); }
+    setTimeout(function () {
+      if (el.parentNode) el.parentNode.removeChild(el);
+      self.says = self.says.filter(function (x) { return x !== el; });
+    }, 9500);
+    var p = seat === this.me ? null : this.bySeat(seat);
+    if (p) this.note(p, '“' + text + '”');
+    this.placeSays();
+    return true;
+  };
+  People.prototype.placeSays = function () {
+    if (!this.says || !this.says.length) return;
+    var el = this.engine.el, v = this.tmp.copy(WORDS_AT).project(this.engine.camera);
+    var show = v.z < 1 && Math.abs(v.x) < 1.2 && Math.abs(v.y) < 1.2;
+    var t = 'translate(' + Math.round((v.x * 0.5 + 0.5) * el.clientWidth) + 'px,' + Math.round((0.5 - v.y * 0.5) * el.clientHeight) + 'px) translate(-50%, -100%)';
+    this.says.forEach(function (s) { s.style.transform = t; s.classList.toggle('is-hidden', !show); });
   };
   People.prototype.update = function (dt, time, cam, draw) {
     var self = this, el = this.engine.el, w = el.clientWidth, h = el.clientHeight, v = this.tmp;
     this.all().forEach(function (p) {
       p.update(dt, time, cam);
-      if (p.leaving && p.fade <= 0) { p.dispose(); delete self.byKey[p.seat + ':' + p.name]; return; }
+      if (p.leaving && p.fade <= 0) { p.dispose(); delete self.byKey[p.key]; return; }
       if (!draw || !p.tag) return;
       p.headPos(v); v.y += 0.3; v.project(cam);
       var show = p.root.visible && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05 && !p.leaving;
       p.tag.classList.toggle('is-hidden', !show);
       if (show) p.tag.style.transform = 'translate(' + Math.round((v.x * 0.5 + 0.5) * w) + 'px,' + Math.round((0.5 - v.y * 0.5) * h) + 'px) translate(-50%, -100%)';
     });
+    if (draw) this.placeSays();
   };
   // a tap on a person (not on a tag): which seat, or -1
   People.prototype.hit = function (cx, cy) {

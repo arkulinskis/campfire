@@ -20,7 +20,7 @@
    fire.light()  fire.addLog(species, wet)  fire.stir()  fire.setPlace(p)  fire.setWind(0..2)  fire.setVolume(which, v)
    fire.setAutoTend(bool)  fire.setSleep(minutes)  fire.state()  fire.warp(seconds)  fire.destroy()
    fire.attach(element)  fire.pause(bool)  fire.setHandlers(onState, onEvent)  fire.setQuality(name)
-   fire.setCircle(json)  fire.circleAct(seat, kind, toSeat, wood, wet): the people around the fire (cf-people.js);
+   fire.setCircle(json)  fire.circleAct(seat, kind, toSeat, wood, wet)  fire.circleSay(seat, text, name): the people around the fire (cf-people.js);
    onEvent('wave_to', seat) when you tap someone or their name tag.
    CF.shared(element, opts): one fire per page load (it keeps burning, and crackling, while another page is open).
    window.CF_TEST: {norender: bool, quality: name, uncap: bool (no frame cap: benchmarks)} for tests. */
@@ -908,6 +908,10 @@
   };
   Campfire.prototype.circleAct = function (seat, kind, to, wood, wet) {
     return this.people ? this.people.act(seat | 0, String(kind), to === null || to === undefined ? -1 : to | 0, wood || null, !!wet) : false;
+  };
+  // three words said to the circle (seat = who; name = shown under the words, '' for your own)
+  Campfire.prototype.circleSay = function (seat, text, name) {
+    return this.people ? this.people.say(seat | 0, String(text || '').slice(0, 60), name ? String(name) : '') : false;
   };
   Campfire.prototype.setWind = function (level) { this.wind.level = CF.clamp(level | 0, 0, 2); };
   Campfire.prototype.setVolume = function (which, v) { if (which === 'master') this.audio.vol.masterUser = v; this.audio.setVolume(which, v); };
