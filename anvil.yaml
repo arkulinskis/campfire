@@ -198,7 +198,7 @@ metadata:
 name: Campfire
 native_deps:
   head_html: |
-    <script src="_/theme/legal-kit.js?v=2add615a71"></script>
+    <script src="_/theme/legal-kit.js?v=d0e59db19c"></script>
     <!-- seo:start (APP_MAKER/seo: edit seo/apps/campfire.json and run seo.py, not here) -->
     <link rel="canonical" href="https://campfire.anvil.app/">
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
@@ -261,7 +261,7 @@ native_deps:
     <!-- Prepsto feedback panel: every "Submit feedback" link and button opens it (it is the only feedback channel). No floating button, no cookies, nothing loads until it is opened. Codes: APP_MAKER/prepsto-links.json -->
     <script src="https://prepsto.com/_/theme/widget.js" data-prepsto="44beb5s" data-button="false" data-label="Submit feedback" async></script>
     <link rel="stylesheet" href="_/theme/icons.css?v=f05ad3f9a4">
-    <link rel="stylesheet" href="_/theme/app.css?v=42220209e0">
+    <link rel="stylesheet" href="_/theme/app.css?v=0cf6287568">
     <script src="_/theme/app-kit.js?v=12bffa8103"></script>
     <!-- the fire engine (three.js r158 + Campfire's own simulation, world, sound) -->
     <script src="_/theme/three.min.js?v=3bfa54fdd7"></script>
