@@ -69,8 +69,11 @@ client_code/
   Components/FireStage     custom component around the engine (events state_change, fire_event)
   Items/WoodButton         a wood in the tray (x-add);  Items/PlaceCard: a campsite in the picker (x-pick)
   Dialogs/Places, Settings place picker; sound/wind/sleep/auto-tend/quality (load/apply live in Settings/__init__)
-  Dialogs/Circle           "Around the fire": 7 gestures (returns the key), three words + your name (calls the page's
-                           _send_words / _rename and shows their error inline)
+  Dialogs/Circle           "Around the fire": 7 gestures (returns the key), tonight's question, three words + your
+                           name (calls the page's _send_words / _rename and shows their error inline), Invite a friend
+                           (share sheet / clipboard / copy box for the page's invite_link())
+  Dialogs/LetGo            "Let it go": a note that the page burns with stage.burn_paper (never sent or stored)
+  questions.py             tonight's question: 45 questions, picked by the UTC day (same for every circle that night)
 server_code/               common.py (C.*), Presence.py (ember_heartbeat, circle_act, circle_say, circle_rename),
                            Profanity.py (clean_words / clean_name / is_rude), SchemaCheck.py, legal_server.py
 theme/assets/              cf-*.js (the engine), three.min.js, app.css (tokens + pages + role layer), icons.css
@@ -219,6 +222,16 @@ tools/                     check.py, assets.py, build_icons.py, make_icons.py, u
 - **Looking at the people:** stage a circle in a shot with `F.setCircle(json)` then `F.setCircle = () => 0` (or the
   page's own heartbeat replaces it), `p.setFade(1)`, and step `F.people.update(0.1, ...)`; call ui_test.start()
   first or the App Server serves the old files.
+
+- **Invitations (2026-11-20):** a circle id (`c-<place>-<8 hex>`, Presence.CID) is the invitation: `#fire/<id>`.
+  Pages/Fire `invite_id(args)` validates it, sets the place, asks `circle_invite` (place, names, room) for the intro
+  line, and sends it as `ember_heartbeat(..., circle=)` ONCE (first heartbeat); the server treats an invitation to
+  another circle as "stale" and `_join(prefer=)` takes that circle if it is alive at this place with a free seat.
+- **Let it go:** engine `burnPaper(text)` (cf-engine.js) puts a `.cf-paper` slip at the fire's projected point; the CSS
+  flies it in from below (`--from`, `--tilt`), the flare + sparks + `Audio.paper` fire at 1.5 s (34% of the 4.4 s
+  animation: keep the two in step). The char edge animates a registered `@property --cf-burn`.
+- **Wake lock:** Pages/Fire `_sync_awake(want)`; Settings key `awake` (default True). Released on hide/slept, retaken
+  on visibilitychange/woke/match/settings close.
 
 ## Gotchas
 - **Flame teeth.** Regular serrations along flame edges came from three things, in this order of blame: vorticity

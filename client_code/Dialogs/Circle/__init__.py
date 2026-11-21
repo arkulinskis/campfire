@@ -1,4 +1,5 @@
 from anvil import *
+from anvil.js import window
 
 from ._anvil_designer import CircleTemplate
 from ... import state
@@ -14,15 +15,24 @@ def word_count(text):
 class Circle(CircleTemplate):
     """What you can do with your circle: a gesture (wave, nod, clap, laugh, point at the stars, stretch, warm your
     hands), three words that rise out of everyone's fire, and your name. Shown with
-    alert(Circle(name=..., company=..., say=fn, rename=fn), buttons=[], role="app-dialog").
+    alert(Circle(name=..., company=..., say=fn, rename=fn, question=..., invite=link), buttons=[], role="app-dialog").
     A gesture closes it and returns the gesture's key (the page plays and shares it); say(text) and rename(name) are
-    the page's own functions and return an error to show here, or None."""
+    the page's own functions and return an error to show here, or None. `question` = tonight's question
+    (questions.py); `invite` = the link that seats a friend in this circle ("" hides the invite)."""
 
-    def __init__(self, name="", company=False, say=None, rename=None, **properties):
+    def __init__(self, name="", company=False, say=None, rename=None, question="", invite="", **properties):
         self._say_fn = say
         self._rename_fn = rename
+        self._invite = invite or ""
         super().__init__(**properties)
         self.name_box.text = name or ""
+        self.question_label.text = question or ""
+        self.question_label.visible = bool(question)
+        self.invite_button.visible = bool(self._invite)
+        self.invite_field.visible = False
+        if not self._invite:
+            self.invite_note.text = "Sit down first: an invitation leads to your circle."
+        state.set_control_attr(self.invite_box, "readonly", "readonly")
         self.alone_note.visible = not company
         for key in GESTURES:
             getattr(self, key + "_g").enabled = bool(company)
@@ -64,6 +74,33 @@ class Circle(CircleTemplate):
     @handle("warm_g", "click")
     def warm_g_click(self, **event_args):
         self._gesture("warm")
+
+    # ---- an invitation: the phone's share sheet, else the clipboard, else the link to copy by hand
+    @handle("invite_button", "click")
+    def invite_button_click(self, **event_args):
+        link = self._invite
+        if not link:
+            return
+        nav = window.navigator
+        if nav.get("share"):
+            try:
+                nav.share({"title": "Campfire", "text": "Come and sit by the fire with me.", "url": link})
+                self.invite_note.text = "Sent. Your friend sits down in this circle if a seat is free."
+                return
+            except Exception as e:
+                if "AbortError" in str(e):   # they closed the share sheet
+                    return
+        try:
+            nav.clipboard.writeText(link)
+            self.invite_note.text = "Link copied. Send it to a friend: it works while someone sits by this fire."
+            return
+        except Exception:
+            pass
+        self.invite_box.text = link
+        self.invite_field.visible = True
+        self.invite_note.text = "Copy this link and send it to a friend."
+        state.focus(self.invite_box)
+        state.control(self.invite_box).select()
 
     # ---- three words
     def _count(self):

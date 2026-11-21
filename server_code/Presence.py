@@ -45,6 +45,7 @@ GESTURES = ("wave", "nod", "clap", "laugh", "stars", "stretch", "warm")
 KINDS = GESTURES + ("log", "stir")
 REPEAT = dt.timedelta(seconds=3)   # the same gesture (or words) again this soon from the same seat = one
 AID = re.compile(r"^[A-Za-z0-9-]{8,40}$")
+CID = re.compile(r"^c-(forest|snow|desert)-[0-9a-f]{8}$")   # a circle's id, as it appears in an invitation link
 
 
 def _look(sid):
@@ -69,15 +70,18 @@ def _name_ok(name, taken):
     return None
 
 
-def _join(row, place, now, want=None):
-    """Seat this visitor in the fullest circle at this place that still has room (or a new circle)."""
+def _join(row, place, now, want=None, prefer=None):
+    """Seat this visitor in the fullest circle at this place that still has room (or a new circle).
+    `prefer` = a circle id from an invitation link: sit there if someone is in it and a seat is free."""
     for _ in range(3):   # two people taking the same seat at the same moment: the later one picks again
         circles = {}
         for r in app_tables.embers.search(place=place, seen=q.greater_than(now - ALIVE)):
             if r["sid"] != row["sid"] and r["circle"] and r["seat"] is not None:
                 circles.setdefault(r["circle"], {})[int(r["seat"])] = r["name"]
         open_ = [c for c in circles if len(circles[c]) < SEATS]
-        if open_:
+        if prefer in open_:
+            cid, taken = prefer, circles[prefer]
+        elif open_:
             cid = max(open_, key=lambda c: (len(circles[c]), c))
             taken = circles[cid]
         else:
@@ -117,14 +121,17 @@ def _circle(row, now, since):
 
 
 @anvil.server.callable
-def ember_heartbeat(sid, place, since=None, count=True, name=None):
+def ember_heartbeat(sid, place, since=None, count=True, name=None, circle=None):
     """Say this visitor is by a fire. Returns how many OTHER visitors are (when `count`), and this visitor's circle:
     {id, seat, name, people: [{seat, name, look}], news: [...], t}. Pass the last reply's `t` as `since`.
-    `name` = the name this visitor chose before (kept in their browser): used when they sit down, if it's free."""
+    `name` = the name this visitor chose before (kept in their browser): used when they sit down, if it's free.
+    `circle` = the circle id from an invitation link (#fire/<id>): sit in that circle if it has a free seat."""
     sid = C.text(sid, 64)
     if not SID.match(sid):
         return C.fail("That isn't a visit code.")
     place = place if place in PLACES else "forest"
+    prefer = C.text(circle, 40) if circle else None
+    prefer = prefer if prefer and CID.match(prefer) and prefer.split("-")[1] == place else None
     if C.rate_limited("beat", 12, 60):
         return C.fail("Too many heartbeats. Wait a minute.")
     now = C.now()
@@ -134,9 +141,10 @@ def ember_heartbeat(sid, place, since=None, count=True, name=None):
         stale = True
     else:
         stale = row["seen"] is None or row["seen"] < now - ALIVE or row["place"] != place
+        stale = stale or bool(prefer and row["circle"] != prefer)   # an invitation to another circle: move there
         row.update(place=place, seen=now)
     if stale or not row["circle"]:
-        _join(row, place, now, C.text(name, 20) if name else None)
+        _join(row, place, now, C.text(name, 20) if name else None, prefer)
         since = None   # a new seat: no old news
     out = {"circle": _circle(row, now, since)}
     if count:
@@ -149,6 +157,21 @@ def ember_heartbeat(sid, place, since=None, count=True, name=None):
     if random.random() < 0.1:
         _forget(now)
     return C.ok(**out)
+
+
+@anvil.server.callable
+def circle_invite(cid):
+    """What an invitation link (#fire/<circle id>) leads to: the circle's place, who sits there now (their circle
+    names only) and whether a seat is free. Anyone with the link may ask; nothing else about anyone is shown."""
+    cid = C.text(cid, 40)
+    m = CID.match(cid)
+    if not m:
+        return C.fail("That invitation link isn't quite right.")
+    if C.rate_limited("invite", 20, 60):
+        return C.fail("Too many invitations at once. Wait a minute.")
+    now = C.now()
+    people = sorted([r for r in _alive_in(cid, now) if r["seat"] is not None], key=lambda r: int(r["seat"]))
+    return C.ok(place=m.group(1), names=[r["name"] for r in people if r["name"]], room=len(people) < SEATS)
 
 
 def _sitting(sid, now):

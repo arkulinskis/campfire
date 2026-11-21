@@ -260,9 +260,9 @@ native_deps:
 
     <!-- Prepsto feedback panel: every "Submit feedback" link and button opens it (it is the only feedback channel). No floating button, no cookies, nothing loads until it is opened. Codes: APP_MAKER/prepsto-links.json -->
     <script src="https://prepsto.com/_/theme/widget.js" data-prepsto="44beb5s" data-button="false" data-label="Submit feedback" async></script>
-    <link rel="stylesheet" href="_/theme/icons.css?v=f05ad3f9a4">
-    <link rel="stylesheet" href="_/theme/app.css?v=0cf6287568">
-    <script src="_/theme/app-kit.js?v=12bffa8103"></script>
+    <link rel="stylesheet" href="_/theme/icons.css?v=755e0cefcd">
+    <link rel="stylesheet" href="_/theme/app.css?v=01fb4f8dd9">
+    <script src="_/theme/app-kit.js?v=7861614813"></script>
     <!-- the fire engine (three.js r158 + Campfire's own simulation, world, sound) -->
     <script src="_/theme/three.min.js?v=3bfa54fdd7"></script>
     <script src="_/theme/cf-core.js?v=a3c301f17d"></script>
@@ -270,8 +270,8 @@ native_deps:
     <script src="_/theme/cf-fx.js?v=1ea99fba48"></script>
     <script src="_/theme/cf-world.js?v=bd821f9f53"></script>
     <script src="_/theme/cf-people.js?v=e3050ea3ba"></script>
-    <script src="_/theme/cf-audio.js?v=edbac105d2"></script>
-    <script src="_/theme/cf-engine.js?v=8477baccde"></script>
+    <script src="_/theme/cf-audio.js?v=b4d7f26c92"></script>
+    <script src="_/theme/cf-engine.js?v=698b30696e"></script>
 package_name: Campfire
 runtime_options:
   client_version: '3'

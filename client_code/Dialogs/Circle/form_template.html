@@ -19,6 +19,8 @@
   </div>
 
   <div class="cf-set-group">
+    <span class="cf-set-label">Tonight's question</span>
+    <anvil-component type="Label" name="question_label" prop:role='["cf-question"]'></anvil-component>
     <label class="ui-field"><span>Say three words</span>
       <anvil-component type="TextBox" name="say_box" prop:placeholder="Warm night, everyone"></anvil-component>
     </label>
@@ -27,7 +29,19 @@
       <anvil-component type="Button" name="say_button" prop:text="Send to the fire" prop:role='["btn", "btn-primary", "ic-chat"]'></anvil-component>
     </div>
     <anvil-component type="Label" name="say_error" prop:role='["msg-error"]' prop:visible="false"></anvil-component>
-    <p class="cf-set-hint">The words rise out of the flames for everyone in your circle. Kind words only: anything rude is stopped.</p>
+    <p class="cf-set-hint">Answer tonight's question, or say anything. The words rise out of the flames for everyone in your
+      circle. Kind words only: anything rude is stopped.</p>
+  </div>
+
+  <div class="cf-set-group">
+    <span class="cf-set-label">Bring someone</span>
+    <div class="cf-say-row">
+      <anvil-component type="Label" name="invite_note" prop:role='["cf-set-hint"]' prop:text="Send a friend a link: they sit down in this circle if a seat is free."></anvil-component>
+      <anvil-component type="Button" name="invite_button" prop:text="Invite a friend" prop:role='["btn", "ic-link"]'></anvil-component>
+    </div>
+    <label class="ui-field" anvil:name="invite_field"><span>Your invitation link</span>
+      <anvil-component type="TextBox" name="invite_box"></anvil-component>
+    </label>
   </div>
 
   <div class="cf-set-group">

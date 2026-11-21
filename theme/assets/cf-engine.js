@@ -913,6 +913,30 @@
   Campfire.prototype.circleSay = function (seat, text, name) {
     return this.people ? this.people.say(seat | 0, String(text || '').slice(0, 60), name ? String(name) : '') : false;
   };
+  // "Let it go": a slip of paper with the visitor's words flies into the fire, catches, curls and goes up in a flare.
+  // DOM over the canvas (styled in app.css .cf-paper), aimed at the fire's place on screen; the words never leave here.
+  Campfire.prototype.burnPaper = function (text) {
+    if (!this.lit || !this.el || !text) return false;
+    var self = this, el = document.createElement('div'), inner = document.createElement('div'), w = this.el.clientWidth, h = this.el.clientHeight;
+    el.className = 'cf-paper'; el.setAttribute('aria-hidden', 'true');
+    inner.className = 'cf-paper-in'; inner.textContent = String(text).slice(0, 280);
+    el.appendChild(inner);
+    var v = _c.set(0, 0.22, 0).project(this.camera), x = w / 2, y = h * 0.58;
+    if (v.z < 1 && Math.abs(v.x) < 1 && Math.abs(v.y) < 1) { x = (v.x * 0.5 + 0.5) * w; y = (0.5 - v.y * 0.5) * h; }
+    el.style.left = Math.round(x) + 'px'; el.style.top = Math.round(y) + 'px';
+    el.style.setProperty('--from', Math.round(Math.max(120, h - y + 40)) + 'px');
+    el.style.setProperty('--tilt', (CF.rng.range(-9, 9)).toFixed(1) + 'deg');
+    this.el.appendChild(el);
+    setTimeout(function () {   // it lands: the flames take it
+      if (!self.lit) return;
+      self.flares.push({ t: 0, dur: 2.2, k: 1.25 });
+      self.sparks.emit(CF.rng.gauss() * 0.04, 0.24, CF.rng.gauss() * 0.04, 70, 3.4, 0.55, 1.2);
+      self.audio.paper();
+    }, 1500);
+    setTimeout(function () { self.sparks.emit(0, 0.35, 0, 30, 2.4, 0.5, 1.1); }, 2300);
+    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 4400);
+    return true;
+  };
   Campfire.prototype.setWind = function (level) { this.wind.level = CF.clamp(level | 0, 0, 2); };
   Campfire.prototype.setVolume = function (which, v) { if (which === 'master') this.audio.vol.masterUser = v; this.audio.setVolume(which, v); };
   Campfire.prototype.setAutoTend = function (on) { this.autoTend = !!on; };

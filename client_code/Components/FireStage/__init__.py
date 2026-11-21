@@ -128,6 +128,10 @@ class FireStage(FireStageTemplate):
         if self._ready():
             self._engine.circleSay(int(seat), str(text), str(name or ""))
 
+    def burn_paper(self, text):
+        """"Let it go": the visitor's words on a slip of paper fly into the fire and burn (only in this browser)."""
+        return bool(self._engine.burnPaper(str(text))) if self._ready() else False
+
     def state(self):
         return fire.state(self._engine) if self._ready() else {"ok": False, "lit": False}
 

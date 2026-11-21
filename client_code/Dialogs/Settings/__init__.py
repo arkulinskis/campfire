@@ -3,7 +3,7 @@ from anvil import *
 from ._anvil_designer import SettingsTemplate
 from ... import state
 
-DEFAULTS = {"fire": 0.9, "night": 0.7, "wind": 1, "quality": "auto", "tend": False}
+DEFAULTS = {"fire": 0.9, "night": 0.7, "wind": 1, "quality": "auto", "tend": False, "awake": True}
 
 
 def load():
@@ -33,6 +33,7 @@ class Settings(SettingsTemplate):
         self.dom_nodes["fire_vol"].value = str(int(self.s["fire"] * 100))
         self.dom_nodes["night_vol"].value = str(int(self.s["night"] * 100))
         self.tend_box.checked = bool(self.s["tend"])
+        self.awake_box.checked = bool(self.s["awake"])
         self.sleep_left = int(stage.state().get("sleepLeft") or 0)
         self._draw()
 
@@ -93,6 +94,12 @@ class Settings(SettingsTemplate):
     def tend_box_change(self, **event_args):
         self.s["tend"] = bool(self.tend_box.checked)
         self.stage.set_auto_tend(self.s["tend"])
+        self._save()
+
+    @handle("awake_box", "change")
+    def awake_box_change(self, **event_args):
+        """Keep the screen on while the fire burns (the page holds a screen wake lock; Pages/Fire _sync_awake)."""
+        self.s["awake"] = bool(self.awake_box.checked)
         self._save()
 
     @handle("close_button", "click")

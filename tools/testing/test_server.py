@@ -266,7 +266,7 @@ assert "sid" in r["tables"]["embers"] and r["tables"]["no_such_table"] is None, 
 # ---------------------------------------------------------------------------------- every callable is public on purpose
 # Campfire has no accounts. Every callable must be listed here, so a new one gets a second look.
 PUBLIC = {"admin_status_report",  # checks for an admin itself (AppStatus._require_admin)
-          "log_client_error", "session_ping", "ember_heartbeat", "circle_act", "circle_say", "circle_rename", "legal_state", "legal_accept"}
+          "log_client_error", "session_ping", "ember_heartbeat", "circle_act", "circle_say", "circle_rename", "circle_invite", "legal_state", "legal_accept"}
 for name in sorted(anvil.server.CALLABLES):
     assert name in PUBLIC, "%s is a new public callable: check its input and add it to PUBLIC in test_server.py" % name
 

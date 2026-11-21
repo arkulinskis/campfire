@@ -4,9 +4,10 @@ import anvil.server
 from anvil.js import window
 
 from ._anvil_designer import FireTemplate
-from ... import fire, state
+from ... import fire, questions, state
 from ...Dialogs import Settings as settings_mod
 from ...Dialogs.Circle import Circle
+from ...Dialogs.LetGo import LetGo
 from ...Dialogs.Places import Places
 from ...Dialogs.Settings import Settings
 
@@ -18,6 +19,7 @@ COUNT_EVERY = 4         # the "N more by other fires" count is asked for every 4
 FEED_MS = 12000         # a line of news stays this long (20 s when it asks for a wave back)
 DAMP = {"label": "Damp branch", "note": "hisses, steams and smokes before it catches"}
 AGAIN_MS = 3500         # the same gesture again this soon is ignored (double clicks, a held key)
+QUESTION_MS = 9000      # tonight's question comes this long after the "X is by this fire with you" line
 # gestures: (what someone else does, what you do)
 GESTURE_TEXT = {"nod": ("nods", "nod"), "clap": ("claps", "clap"), "laugh": ("laughs", "laugh"),
                 "stars": ("points at the stars", "point at the stars"), "stretch": ("stretches", "stretch"),
@@ -25,7 +27,28 @@ GESTURE_TEXT = {"nod": ("nods", "nod"), "clap": ("claps", "clap"), "laugh": ("la
 
 # One visit per page load: the visit code and the news already played survive the fire page being opened again
 # (About and back), so you never get a second seat and nothing plays twice.
-_VISIT: dict = {"sid": None, "seen": {}}
+_VISIT: dict = {"sid": None, "seen": {}, "asked": False}
+
+
+def invite_id(args):
+    """The circle id from an invitation link (#fire/c-forest-1a2b3c4d), or None."""
+    cid = str(args[0]) if args else ""
+    parts = cid.split("-")
+    if len(parts) == 3 and parts[0] == "c" and parts[1] in fire.PLACE_NAMES and len(parts[2]) == 8 \
+            and all(ch in "0123456789abcdef" for ch in parts[2]):
+        return cid
+    return None
+
+
+def invite_text(r, place_name):
+    """What the intro says about an invitation (r = circle_invite's reply)."""
+    names = list(r.get("names") or [])
+    if not names:
+        return "The fire you were invited to has gone quiet. Strike a match and sit at %s: others may come." % place_name
+    if not r.get("room"):
+        return "%s's circle is full right now (six at most). Strike a match to sit with others at %s." % (names[0], place_name)
+    return "%s %s by this fire. There's a seat for you: strike the match to sit down." % (
+        names_text(names), "is" if len(names) == 1 else "are")
 
 
 def status_text(st):
@@ -102,7 +125,8 @@ def a_log(label, wet):
 class Fire(FireTemplate):
     """The campfire: you arrive in the dark beside a laid fire, strike a match, then tend it (woods, stir), change the
     place, the sound, the wind, or set it to burn down while you fall asleep. The controls fade away when you sit
-    still. Keys: L log, S stir, W wave, C circle (gestures, three words, your name), M sound, F full screen, P place.
+    still. Keys: L log, S stir, W wave, C circle (gestures, three words, your name, invite), G let go, M sound,
+    F full screen, P place. #fire/<circle id> = an invitation: sit in that circle if a seat is free.
 
     Others by a fire at the same place sit around yours (circles of up to six, seated by the server: Presence.py).
     What they do comes in slowly with each heartbeat: they wave, or throw a log on (it lands in your fire too)."""
@@ -111,6 +135,10 @@ class Fire(FireTemplate):
         super().__init__(**properties)
         place = state.store_get("place", "forest")
         self.place = place if place in fire.PLACE_NAMES else "forest"
+        self.invite = invite_id(args)   # an invitation link: sit in that circle if a seat is free
+        if self.invite:
+            self.place = self.invite.split("-")[1]
+            state.store_set("place", self.place)
         self.settings = settings_mod.load()
         self.stage.quality = self.settings["quality"]
         self.stage.place = self.place
@@ -142,6 +170,11 @@ class Fire(FireTemplate):
         self._show_lit(fire.available() and fire.is_shared_lit())
         self.wood_panel.add_event_handler("x-add", self._add)
         self.relight_button.visible = False
+        self.invite_label.visible = False
+        self.wake_lock = None
+        self._vis = anvil.js.report_exceptions(self._on_visible)
+        if self.invite:
+            self._show_invite()
         state.live(self.status_label)
         state.live(self.feed_label)
         self._move = anvil.js.report_exceptions(self._on_move)
@@ -158,19 +191,38 @@ class Fire(FireTemplate):
         except Exception:
             return "s-%d-%d" % (int(window.Date.now()), int(window.Math.random() * 1e9))
 
+    def _show_invite(self):
+        r = state.call_quiet("circle_invite", self.invite)
+        if not (isinstance(r, dict) and r.get("ok")):
+            self.invite = None
+            return
+        self.invite_label.text = invite_text(r, fire.PLACE_NAMES[self.place])
+        self.invite_label.visible = True
+
+    def invite_link(self):
+        """The link that seats a friend in my circle."""
+        if not self.circle.get("id"):
+            return ""
+        loc = window.location
+        return "%s%s#fire/%s" % (loc.origin, loc.pathname, self.circle["id"])
+
     # ---- page life
     @handle("", "show")
     def form_show(self, **event_args):
         for ev in ("pointermove", "pointerdown", "touchstart"):
             window.document.addEventListener(ev, self._move, {"passive": True})
         window.document.addEventListener("keydown", self._keys)
+        window.document.addEventListener("visibilitychange", self._vis)
         self._wake()
+        self._sync_awake()
 
     @handle("", "hide")
     def form_hide(self, **event_args):
         for ev in ("pointermove", "pointerdown", "touchstart"):
             window.document.removeEventListener(ev, self._move)
         window.document.removeEventListener("keydown", self._keys)
+        window.document.removeEventListener("visibilitychange", self._vis)
+        self._sync_awake(False)
         if self.idle_timer is not None:
             window.clearTimeout(self.idle_timer)
         _html().classList.remove("cf-idle")
@@ -206,8 +258,10 @@ class Fire(FireTemplate):
             self.hud.visible = False
         elif name == "slept":   # the engine stops drawing here (no battery spent all night); a touch or a key wakes it
             state.toast("Goodnight. The fire has burned down. Touch the screen to bring it back.")
+            self._sync_awake(False)   # and the screen may sleep too
         elif name == "woke":
             self._wake()
+            self._sync_awake()
         elif name == "wave_to":
             data = event_args.get("data")
             self._wave(int(data) if isinstance(data, (int, float)) else None)
@@ -227,13 +281,17 @@ class Fire(FireTemplate):
     def _heartbeat(self):
         self.beats += 1
         count = self.others is None or self.beats % COUNT_EVERY == 1
-        r = state.call_quiet("ember_heartbeat", self.sid, self.place, self.since, count, state.store_get("name"))
+        r = state.call_quiet("ember_heartbeat", self.sid, self.place, self.since, count, state.store_get("name"),
+                             self.invite)
         if not (isinstance(r, dict) and r.get("ok")):
             return
         if "others" in r:
             self.others = int(r.get("others") or 0)
+        invited, self.invite = self.invite, None   # one try: the server seats me there if a seat is free
         self._apply_circle(r.get("circle") or {})
         self.presence_label.text = presence_text(self.others, self.circle)
+        if invited and self.circle and self.circle.get("id") != invited:
+            self._say("That circle was full or had gone quiet, so you sit with others here.")
 
     def _apply_circle(self, c):
         old = self.circle
@@ -254,6 +312,7 @@ class Fire(FireTemplate):
             if now_:
                 self._say("%s %s by this fire with you. Tap someone to wave."
                           % (names_text(list(now_.values())), "is" if len(now_) == 1 else "are"))
+                self._ask_soon()
         else:
             came = [n for k, n in now_.items() if k not in before]
             went = [n for k, n in before.items() if k not in now_]
@@ -261,6 +320,7 @@ class Fire(FireTemplate):
             lines = []
             if came:
                 lines.append("%s sat down by the fire." % names_text(came))
+                self._ask_soon()
             if went:
                 lines.append("%s %s gone." % (names_text(went), "has" if len(went) == 1 else "have"))
             lines += ["%s is now called %s." % r for r in renamed]
@@ -273,6 +333,17 @@ class Fire(FireTemplate):
                 fresh.append(n)
         for i, n in enumerate(fresh[-8:]):   # a little apart, so several things don't happen at once
             self._later(i * 1700, n)
+
+    def _ask_soon(self):
+        """Tonight's question, once a visit, a little after you first sit with company."""
+        if _VISIT["asked"]:
+            return
+        _VISIT["asked"] = True
+
+        def ask():
+            if self._company() and not _dialog_open():
+                self._say("Tonight by the fire: %s Answer in three words with Circle (C)." % questions.tonight())
+        window.setTimeout(anvil.js.report_exceptions(ask), QUESTION_MS)
 
     def _later(self, ms, news):
         def go():
@@ -388,9 +459,20 @@ class Fire(FireTemplate):
         if not self.circle:
             return
         kind = alert(Circle(name=self.circle.get("name") or "", company=self._company(), say=self._send_words,
-                            rename=self._rename), buttons=[], role="app-dialog", dismissible=True)
+                            rename=self._rename, question=questions.tonight(), invite=self.invite_link()),
+                     buttons=[], role="app-dialog", dismissible=True)
         if kind:
             self._gesture(kind)
+
+    # ---- let it go: words on paper, burned in this browser only (never sent anywhere)
+    def _let_go(self):
+        text = alert(LetGo(), buttons=[], role="app-dialog", dismissible=True)
+        if text and not self.stage.burn_paper(text):
+            state.toast("Light the fire first.")
+
+    @handle("letgo_button", "click")
+    def letgo_button_click(self, **event_args):
+        self._let_go()
 
     @handle("circle_button", "click")
     def circle_button_click(self, **event_args):
@@ -416,8 +498,10 @@ class Fire(FireTemplate):
     def match_button_click(self, **event_args):
         self.stage.light()
         self._show_lit(True)
+        self.invite_label.visible = False
         self.beat_at = 0
         self._wake()
+        self._sync_awake(True)
         state.focus(self.stir_button)
 
     @handle("relight_button", "click")
@@ -480,6 +564,36 @@ class Fire(FireTemplate):
     def settings_button_click(self, **event_args):
         alert(Settings(stage=self.stage), buttons=[], role="app-dialog", dismissible=True)
         self.settings = settings_mod.load()
+        self._sync_awake()
+
+    # ---- keep the screen on while the fire burns (Screen Wake Lock; quietly nothing where a browser lacks it)
+    def _sync_awake(self, want=None):
+        if want is None or want:
+            st = self.stage.state()
+            want = bool(self.settings.get("awake", True) and (want or st.get("lit")) and not st.get("asleep")
+                        and not _DOC.hidden)
+        lock = self.wake_lock
+        if want and lock is None:
+            api = window.navigator.get("wakeLock")
+            if not api:
+                return
+            try:
+                self.wake_lock = api.request("screen")
+            except Exception:
+                self.wake_lock = None   # refused (battery saver, tab not visible): tried again at the next chance
+        elif not want and lock is not None:
+            self.wake_lock = None
+            try:
+                lock.release()
+            except Exception:
+                pass
+
+    def _on_visible(self, event):
+        """The browser drops a wake lock when the tab is hidden: take it again on return."""
+        if _DOC.hidden:
+            self.wake_lock = None
+        else:
+            self._sync_awake()
 
     @handle("full_button", "click")
     def full_button_click(self, **event_args):
@@ -524,6 +638,8 @@ class Fire(FireTemplate):
             self._wave(None)
         elif k == "c":
             self._open_circle()
+        elif k == "g":
+            self._let_go()
         elif k == "m":
             self.sound_button_click()
         elif k == "f":

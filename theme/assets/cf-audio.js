@@ -287,6 +287,13 @@
     this.noiseHit(t + 0.13, 0.7, 'bandpass', 700, 0.8, 0.28, 0.1, 2600, null, 0.2);
     this.noiseHit(t + 0.14, 1.6, 'highpass', 3000, 0.7, 0.05, 0.1);
   };
+  // a sheet of paper going up: a soft rushing flare and a flurry of small crackles (kept at the fire's own level)
+  Audio.prototype.paper = function () {
+    if (!this.ctx) return; var t = this.ctx.currentTime + 0.01, R = CF.rng;
+    this.noiseHit(t, 1.6, 'bandpass', 900, 0.6, 0.09, 0, 2200, null, 0.25);
+    this.noiseHit(t + 0.05, 1.1, 'highpass', 2600, 0.7, 0.025, 0);
+    for (var i = 0; i < 14; i++) this.crackle(t + 0.1 + R.expo(0.35), R.range(-0.3, 0.3), false, null);
+  };
   Audio.prototype.logDrop = function (pan) {
     if (!this.ctx) return; var t = this.ctx.currentTime + 0.01, c = this.ctx, R = CF.rng;
     this.noiseHit(t, 0.18, 'lowpass', 380, 0.8, 0.9, pan, null, null, 0.2);
